@@ -10,6 +10,9 @@ import { ITEM_DEFS, dropFor } from './items.js';
 import { Inventory } from './inventory.js';
 import { Mining } from './mining.js';
 import { HotbarUI, setMiningProgress } from './hotbar.js';
+import { LightManager } from './lights.js';
+import { applyStability } from './stability.js';
+import { FallingBlocks } from './falling.js';
 
 // --- renderer + scene ---
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
@@ -45,9 +48,22 @@ inventory.add('pickaxe', 1);
 inventory.add('shovel', 1);
 inventory.add('axe', 1);
 inventory.add('concrete', 32);
+inventory.add('wood', 16);
+inventory.add('torch', 8);
 inventory.setActive(0);
 const hotbar = new HotbarUI(inventory);
 const mining = new Mining();
+
+// --- lighting (driven by torch placements via world.onChange) ---
+const lights = new LightManager(scene, 40);
+world.onChange((x, y, z, prev, next) => {
+  if (prev === BLOCKS.TORCH && next !== BLOCKS.TORCH) lights.remove(x, y, z);
+  if (prev !== BLOCKS.TORCH && next === BLOCKS.TORCH) lights.add(x, y, z);
+});
+
+// --- falling-block entities (cave-in physics) ---
+const falling = new FallingBlocks(scene, world, world.geo, world.materials);
+function spawnFalling(x, y, z, blockId) { falling.spawn(x, y, z, blockId); }
 
 // --- pointer lock + input ---
 const overlay = document.getElementById('overlay');
@@ -124,6 +140,8 @@ addEventListener('mousedown', (e) => {
     if (p.x >= px0 && p.x <= px1 && p.y >= py0 && p.y <= py1 && p.z >= pz0 && p.z <= pz1) return;
     world.setBlock(p.x, p.y, p.z, def.blockId);
     inventory.consumeActive();
+    // Mid-air placements with no chain to bedrock collapse and fall.
+    applyStability(world, p.x, p.y, p.z, spawnFalling);
   }
 });
 addEventListener('mouseup', (e) => {
@@ -157,13 +175,16 @@ function tickMining(dt) {
   }
   if (mining.tick(dt)) {
     const drop = dropFor(r.hit.id);
-    world.setBlock(r.hit.x, r.hit.y, r.hit.z, BLOCKS.AIR);
+    const mx = r.hit.x, my = r.hit.y, mz = r.hit.z;
+    world.setBlock(mx, my, mz, BLOCKS.AIR);
     if (drop) {
       const added = inventory.add(drop, 1);
       if (added === 0) hotbar.showToast('INVENTORY FULL');
     }
     mining.cancel();
     setMiningProgress(0);
+    // Stability: pulled material may de-anchor neighbors; cave-in blocks fall as entities.
+    applyStability(world, mx, my, mz, spawnFalling);
   } else {
     setMiningProgress(mining.progress());
   }
@@ -176,6 +197,7 @@ function tick() {
 
   if (locked || bomb.detonated) player.update(input, dt);
   atmosphere.followTarget(player.position);
+  falling.update(dt);
 
   if (locked) tickMining(dt);
 

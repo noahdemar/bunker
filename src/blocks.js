@@ -8,9 +8,10 @@ export const BLOCKS = {
   WOOD:     5,
   LEAVES:   6,
   CONCRETE: 7,
+  TORCH:    8,
 };
 
-export const BLOCK_NAMES = ['air', 'grass', 'dirt', 'stone', 'sand', 'wood', 'leaves', 'concrete'];
+export const BLOCK_NAMES = ['air', 'grass', 'dirt', 'stone', 'sand', 'wood', 'leaves', 'concrete', 'torch'];
 
 // Hotbar order shown in HUD.
 export const HOTBAR = [

@@ -15,6 +15,7 @@ export const ITEM_DEFS = {
   grass:    { name: 'Grass',    stack: 64, blockId: BLOCKS.GRASS,    label: 'GRS', color: '#5a8240' },
   sand:     { name: 'Sand',     stack: 64, blockId: BLOCKS.SAND,     label: 'SND', color: '#dcc896' },
   leaves:   { name: 'Leaves',   stack: 64, blockId: BLOCKS.LEAVES,   label: 'LF',  color: '#466632' },
+  torch:    { name: 'Torch',    stack: 16, blockId: BLOCKS.TORCH,    label: 'TCH', color: '#ffaa44' },
 };
 
 // Reverse: blockId -> itemId.
@@ -32,6 +33,7 @@ export const BLOCK_HARDNESS = {
   [BLOCKS.WOOD]:     2.0,
   [BLOCKS.STONE]:    4.5,
   [BLOCKS.CONCRETE]: 6.0,
+  [BLOCKS.TORCH]:    0.15,
 };
 
 // Which tool is "right" for each block.
@@ -43,6 +45,7 @@ export const BLOCK_PREFERRED_TOOL = {
   [BLOCKS.WOOD]:     'axe',
   [BLOCKS.STONE]:    'pick',
   [BLOCKS.CONCRETE]: 'pick',
+  [BLOCKS.TORCH]:    null, // any tool / hands fine
 };
 
 // Effective time for (block, tool). Tool is one of 'pick'|'shovel'|'axe'|null (hands).

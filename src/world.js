@@ -18,8 +18,11 @@ export class World {
     this.instanceMap = new Map(); // "x,y,z" -> { type, index }
     this._dummy = new THREE.Object3D();
     this._mat4 = new THREE.Matrix4();
+    this.changeListeners = []; // (x, y, z, prev, next) — fires on every setBlock that changes state
     this._build();
   }
+
+  onChange(fn) { this.changeListeners.push(fn); }
 
   _isVisible(x, y, z) {
     if (this.terrain.blockAt(x, y, z) === BLOCKS.AIR) return false;
@@ -128,14 +131,17 @@ export class World {
   }
 
   setBlock(x, y, z, id) {
+    const prev = this.terrain.blockAt(x, y, z);
+    if (prev === id) return;
     this.terrain.setBlock(x, y, z, id);
     this._refreshAround(x, y, z);
+    for (const fn of this.changeListeners) fn(x, y, z, prev, id);
   }
 
-  // Solid for movement collision. Leaves are passable.
+  // Solid for movement collision. Leaves and torches are passable.
   isSolid(x, y, z) {
     const id = this.terrain.blockAt(x, y, z);
-    return id !== BLOCKS.AIR && id !== BLOCKS.LEAVES;
+    return id !== BLOCKS.AIR && id !== BLOCKS.LEAVES && id !== BLOCKS.TORCH;
   }
 
   // Voxel raycast (Amanatides–Woo). Returns { hit:{x,y,z,id}, place:{x,y,z}, normal:[dx,dy,dz] } or null.

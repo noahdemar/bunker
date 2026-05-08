@@ -150,6 +150,40 @@ function leavesTex() {
   bevel(ctx, 0.18);
   return texFromCanvas(c);
 }
+function torchSideTex() {
+  const [c, ctx] = makeCanvas();
+  // dark
+  ctx.fillStyle = '#1a1208';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  // wooden stick (bottom 65%)
+  ctx.fillStyle = '#62421e';
+  ctx.fillRect(SIZE * 0.40, SIZE * 0.30, SIZE * 0.20, SIZE * 0.55);
+  // flame core (top)
+  const fx = SIZE * 0.5, fy = SIZE * 0.22;
+  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.32);
+  grad.addColorStop(0, '#fff4b8');
+  grad.addColorStop(0.4, '#ffaa44');
+  grad.addColorStop(0.8, '#aa3000');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, SIZE, SIZE * 0.55);
+  return texFromCanvas(c);
+}
+function torchEmissiveTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  // emissive only the flame
+  const fx = SIZE * 0.5, fy = SIZE * 0.22;
+  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.32);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.4, '#ffcc66');
+  grad.addColorStop(0.8, '#552200');
+  grad.addColorStop(1, '#000');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, SIZE, SIZE * 0.55);
+  return texFromCanvas(c);
+}
 function concreteTex() {
   const [c, ctx] = makeCanvas();
   speckle(ctx, [122, 118, 110], 30);
@@ -177,6 +211,13 @@ export function makeBlockMaterials() {
     map: leavesTex(), roughness: 1.0, transparent: true, alphaTest: 0.3,
   });
   const concrete = new THREE.MeshStandardMaterial({ map: concreteTex(), roughness: 0.95 });
+  const torchSide = new THREE.MeshStandardMaterial({
+    map: torchSideTex(),
+    emissiveMap: torchEmissiveTex(),
+    emissive: 0xffaa44,
+    emissiveIntensity: 1.4,
+    roughness: 0.8,
+  });
 
   // Helper: faces array [+x, -x, +y, -y, +z, -z]
   const all = m => [m, m, m, m, m, m];
@@ -190,5 +231,6 @@ export function makeBlockMaterials() {
   materials[BLOCKS.WOOD]     = split(woodSide, woodTop, woodTop);
   materials[BLOCKS.LEAVES]   = all(leaves);
   materials[BLOCKS.CONCRETE] = all(concrete);
+  materials[BLOCKS.TORCH]    = all(torchSide);
   return materials;
 }
