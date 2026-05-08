@@ -22,6 +22,11 @@ const MAT_COST = {
   [BLOCKS.SAND]:     3,
   [BLOCKS.LEAVES]:   99,
   [BLOCKS.TORCH]:    99,
+  // devices: solid manufactured objects, behave like stone
+  [BLOCKS.WATER_TANK]:  1,
+  [BLOCKS.FOOD_LOCKER]: 1,
+  [BLOCKS.GENERATOR]:   1,
+  [BLOCKS.BED]:         2,
 };
 
 const BEDROCK_Y = -5;

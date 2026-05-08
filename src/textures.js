@@ -150,6 +150,138 @@ function leavesTex() {
   bevel(ctx, 0.18);
   return texFromCanvas(c);
 }
+function waterTankSideTex() {
+  const [c, ctx] = makeCanvas();
+  speckle(ctx, [50, 110, 160], 18);
+  // wave band
+  ctx.fillStyle = 'rgba(220,235,250,0.55)';
+  for (let y = SIZE * 0.4; y < SIZE * 0.6; y += 4) {
+    ctx.beginPath();
+    for (let x = 0; x <= SIZE; x += 4) {
+      ctx.lineTo(x, y + Math.sin((x / SIZE) * Math.PI * 4) * 2);
+    }
+    ctx.lineTo(SIZE, y + 3);
+    ctx.lineTo(0, y + 3);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // bolt corners
+  ctx.fillStyle = '#1c4868';
+  for (const [bx, by] of [[4, 4], [SIZE - 8, 4], [4, SIZE - 8], [SIZE - 8, SIZE - 8]]) {
+    ctx.fillRect(bx, by, 4, 4);
+  }
+  bevel(ctx, 0.32);
+  return texFromCanvas(c);
+}
+function waterTankTopTex() {
+  const [c, ctx] = makeCanvas();
+  speckle(ctx, [40, 95, 140], 14);
+  // ripples
+  ctx.strokeStyle = 'rgba(220,235,250,0.4)';
+  ctx.lineWidth = 1;
+  for (let r = 4; r < SIZE / 2; r += 6) {
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  bevel(ctx, 0.32);
+  return texFromCanvas(c);
+}
+
+function foodLockerSideTex() {
+  const [c, ctx] = makeCanvas();
+  speckle(ctx, [96, 64, 50], 18);
+  // green band
+  ctx.fillStyle = '#3a6c34';
+  ctx.fillRect(0, SIZE * 0.42, SIZE, SIZE * 0.16);
+  // stencil-style stripes on the band
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let x = 4; x < SIZE; x += 12) {
+    ctx.fillRect(x, SIZE * 0.46, 6, SIZE * 0.08);
+  }
+  // hinge dots
+  ctx.fillStyle = '#181010';
+  ctx.fillRect(SIZE * 0.10, SIZE * 0.18, 4, 4);
+  ctx.fillRect(SIZE * 0.85, SIZE * 0.18, 4, 4);
+  ctx.fillRect(SIZE * 0.10, SIZE * 0.78, 4, 4);
+  ctx.fillRect(SIZE * 0.85, SIZE * 0.78, 4, 4);
+  bevel(ctx, 0.30);
+  return texFromCanvas(c);
+}
+function foodLockerTopTex() {
+  const [c, ctx] = makeCanvas();
+  speckle(ctx, [76, 50, 38], 16);
+  // handle
+  ctx.fillStyle = '#202020';
+  ctx.fillRect(SIZE * 0.30, SIZE * 0.46, SIZE * 0.40, SIZE * 0.08);
+  ctx.fillStyle = '#404040';
+  ctx.fillRect(SIZE * 0.32, SIZE * 0.48, SIZE * 0.36, SIZE * 0.04);
+  bevel(ctx, 0.30);
+  return texFromCanvas(c);
+}
+
+function generatorSideTex() {
+  const [c, ctx] = makeCanvas();
+  speckle(ctx, [60, 60, 66], 14);
+  // vents
+  ctx.fillStyle = '#181818';
+  for (let y = SIZE * 0.20; y < SIZE * 0.80; y += 8) {
+    ctx.fillRect(SIZE * 0.16, y, SIZE * 0.68, 3);
+  }
+  // status LED
+  const lx = SIZE * 0.78, ly = SIZE * 0.16;
+  const grad = ctx.createRadialGradient(lx, ly, 1, lx, ly, 6);
+  grad.addColorStop(0, '#ff6040');
+  grad.addColorStop(0.6, '#a02020');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(lx - 8, ly - 8, 16, 16);
+  bevel(ctx, 0.36);
+  return texFromCanvas(c);
+}
+function generatorTopTex() {
+  const [c, ctx] = makeCanvas();
+  speckle(ctx, [50, 50, 55], 12);
+  // exhaust grille
+  ctx.fillStyle = '#0a0a0a';
+  for (let y = SIZE * 0.20; y < SIZE * 0.80; y += 6) {
+    ctx.fillRect(SIZE * 0.16, y, SIZE * 0.68, 2);
+  }
+  bevel(ctx, 0.36);
+  return texFromCanvas(c);
+}
+
+function bedSideTex() {
+  // Wood frame, low profile
+  const [c, ctx] = makeCanvas();
+  speckle(ctx, [98, 70, 40], 20);
+  for (let x = 2; x < SIZE; x += 4) {
+    ctx.fillStyle = `rgba(60,40,22,${0.2 + Math.random() * 0.3})`;
+    ctx.fillRect(x, 0, 1 + Math.random() * 2, SIZE);
+  }
+  // red blanket peeks above
+  ctx.fillStyle = '#a83030';
+  ctx.fillRect(0, 0, SIZE, SIZE * 0.18);
+  bevel(ctx, 0.24);
+  return texFromCanvas(c);
+}
+function bedTopTex() {
+  const [c, ctx] = makeCanvas();
+  // red blanket main
+  speckle(ctx, [168, 48, 48], 20);
+  // pillow at one end
+  ctx.fillStyle = '#e8e0d0';
+  ctx.fillRect(SIZE * 0.06, SIZE * 0.06, SIZE * 0.30, SIZE * 0.30);
+  ctx.fillStyle = '#cabaa0';
+  ctx.fillRect(SIZE * 0.08, SIZE * 0.08, SIZE * 0.04, SIZE * 0.26);
+  // stitching
+  ctx.strokeStyle = 'rgba(60,10,10,0.45)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(SIZE * 0.10, SIZE * 0.42, SIZE * 0.80, SIZE * 0.50);
+  bevel(ctx, 0.20);
+  return texFromCanvas(c);
+}
+
 function torchSideTex() {
   const [c, ctx] = makeCanvas();
   // dark
@@ -232,5 +364,26 @@ export function makeBlockMaterials() {
   materials[BLOCKS.LEAVES]   = all(leaves);
   materials[BLOCKS.CONCRETE] = all(concrete);
   materials[BLOCKS.TORCH]    = all(torchSide);
+
+  // Devices.
+  const tankSide = new THREE.MeshStandardMaterial({ map: waterTankSideTex(), roughness: 0.7, metalness: 0.25 });
+  const tankTop  = new THREE.MeshStandardMaterial({ map: waterTankTopTex(),  roughness: 0.55, metalness: 0.15 });
+  materials[BLOCKS.WATER_TANK] = split(tankSide, tankTop, tankSide);
+
+  const lockerSide = new THREE.MeshStandardMaterial({ map: foodLockerSideTex(), roughness: 0.85 });
+  const lockerTop  = new THREE.MeshStandardMaterial({ map: foodLockerTopTex(),  roughness: 0.85 });
+  materials[BLOCKS.FOOD_LOCKER] = split(lockerSide, lockerTop, lockerSide);
+
+  const genSide = new THREE.MeshStandardMaterial({
+    map: generatorSideTex(), roughness: 0.6, metalness: 0.4,
+    emissive: 0x401010, emissiveIntensity: 0.3,
+  });
+  const genTop = new THREE.MeshStandardMaterial({ map: generatorTopTex(), roughness: 0.6, metalness: 0.4 });
+  materials[BLOCKS.GENERATOR] = split(genSide, genTop, genSide);
+
+  const bedSide = new THREE.MeshStandardMaterial({ map: bedSideTex(), roughness: 0.9 });
+  const bedTop  = new THREE.MeshStandardMaterial({ map: bedTopTex(),  roughness: 0.95 });
+  materials[BLOCKS.BED] = split(bedSide, bedTop, bedSide);
+
   return materials;
 }

@@ -5,6 +5,7 @@ export class HUD {
     this.timerEl = document.getElementById('timer');
     this.overlayEl = document.getElementById('overlay');
     this.fired = false;
+    this.gameOver = false;
   }
 
   // Returns true on the first frame the timer reaches zero.
@@ -23,11 +24,20 @@ export class HUD {
     return false;
   }
 
-  showResult(survived) {
+  // outcome: 'rescued' | 'died-exposed' | 'died-thirst' | 'died-starvation'
+  showResult(outcome) {
+    if (this.gameOver) return;
+    this.gameOver = true;
+    const messages = {
+      'rescued':         ['RESCUED',   'Your bunker held. Help has arrived.'],
+      'died-exposed':    ['YOU DIED',  'The bomb caught you in the open.'],
+      'died-thirst':     ['YOU DIED',  'You died of thirst — the water tank ran dry.'],
+      'died-starvation': ['YOU DIED',  'You died of starvation — the food locker ran dry.'],
+    };
+    const [title, body] = messages[outcome] ?? ['GAME OVER', ''];
     this.overlayEl.classList.remove('hidden');
-    this.overlayEl.querySelector('.panel').innerHTML = survived
-      ? `<h1>YOU SURVIVED</h1><p>Your bunker held.</p><p style="opacity:0.7;margin-top:14px;">Reload to play again.</p>`
-      : `<h1>YOU DIED</h1><p>The bomb caught you in the open.</p><p style="opacity:0.7;margin-top:14px;">Reload to play again.</p>`;
+    this.overlayEl.querySelector('.panel').innerHTML =
+      `<h1>${title}</h1><p>${body}</p><p style="opacity:0.7;margin-top:14px;">Reload to play again.</p>`;
     this.overlayEl.style.cursor = 'default';
   }
 }

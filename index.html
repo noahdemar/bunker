@@ -108,6 +108,51 @@
   }
   #toast.visible { opacity: 1; }
 
+  #meters {
+    position: fixed; bottom: 16px; left: 16px;
+    display: flex; flex-direction: column; gap: 4px;
+    pointer-events: none; user-select: none; z-index: 5;
+    background: rgba(0,0,0,0.45); padding: 10px 12px;
+    border: 1px solid #2c2620; border-radius: 6px;
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
+  .meter {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; letter-spacing: 0.05em; color: #ccc;
+  }
+  .meter .lbl { width: 56px; }
+  .meter .bar {
+    width: 130px; height: 8px;
+    background: rgba(0,0,0,0.55); border: 1px solid #1a1410; border-radius: 2px;
+    overflow: hidden; position: relative;
+  }
+  .meter .bar .fill {
+    height: 100%; width: 100%;
+    transition: width 0.25s ease-out;
+  }
+  .meter.water  .fill { background: linear-gradient(90deg, #3070a0, #5aa0c8); }
+  .meter.food   .fill { background: linear-gradient(90deg, #5a7a30, #8aaa50); }
+  .meter.power  .fill { background: linear-gradient(90deg, #b07020, #e0a040); }
+  .meter.health .fill { background: linear-gradient(90deg, #b03028, #e05050); }
+  .meter.low .fill { animation: meterPulse 0.7s ease-in-out infinite alternate; }
+  @keyframes meterPulse { from { opacity: 0.6; } to { opacity: 1; } }
+  .meter .val { width: 28px; text-align: right; color: #eee; }
+  .shelter {
+    margin-top: 4px; font-size: 11px; letter-spacing: 0.08em;
+    color: #888; padding: 2px 6px; border: 1px solid #2c2620; border-radius: 2px;
+    text-align: center;
+  }
+  .shelter.on { color: #9ad0ff; border-color: #2a4868; background: rgba(20,40,60,0.4); }
+
+  #survivaltimer {
+    position: fixed; top: 60px; right: 12px;
+    padding: 6px 10px; font-size: 13px; letter-spacing: 0.1em;
+    color: #9ad0ff; background: rgba(0,30,40,0.5);
+    border: 1px solid #2a4868; border-radius: 4px;
+    pointer-events: none; user-select: none;
+    display: none;
+  }
+
   #vignette {
     position: fixed; inset: 0; pointer-events: none; z-index: 6;
     background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
@@ -134,13 +179,21 @@
   <div><b>BUNKER</b></div>
   <div class="keys">WASD &middot; Space jump &middot; Mouse look</div>
   <div class="keys">L hold to mine &middot; R click place</div>
-  <div class="keys">1-9 select slot &middot; Esc release</div>
+  <div class="keys">1-0 select slot &middot; Esc release</div>
 </div>
 <div id="timer">30:00</div>
 <div id="crosshair"></div>
 <div id="mineprogress"><div class="fill"></div></div>
 <div id="hotbar"></div>
 <div id="toast"></div>
+<div id="meters">
+  <div class="meter water"><div class="lbl">WATER</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="meter food"><div class="lbl">FOOD</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="meter power"><div class="lbl">POWER</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="meter health"><div class="lbl">HEALTH</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="shelter">SHELTER —</div>
+</div>
+<div id="survivaltimer">SURVIVAL 0:00</div>
 <div id="vignette"></div>
 <div id="flash"></div>
 <div id="overlay">

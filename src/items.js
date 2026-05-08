@@ -16,6 +16,11 @@ export const ITEM_DEFS = {
   sand:     { name: 'Sand',     stack: 64, blockId: BLOCKS.SAND,     label: 'SND', color: '#dcc896' },
   leaves:   { name: 'Leaves',   stack: 64, blockId: BLOCKS.LEAVES,   label: 'LF',  color: '#466632' },
   torch:    { name: 'Torch',    stack: 16, blockId: BLOCKS.TORCH,    label: 'TCH', color: '#ffaa44' },
+
+  water_tank:  { name: 'Water Tank',  stack: 4, blockId: BLOCKS.WATER_TANK,  label: 'TNK', color: '#3070a0' },
+  food_locker: { name: 'Food Locker', stack: 4, blockId: BLOCKS.FOOD_LOCKER, label: 'FOD', color: '#604032' },
+  generator:   { name: 'Generator',   stack: 4, blockId: BLOCKS.GENERATOR,   label: 'GEN', color: '#404045' },
+  bed:         { name: 'Bed',         stack: 4, blockId: BLOCKS.BED,         label: 'BED', color: '#a04030' },
 };
 
 // Reverse: blockId -> itemId.
@@ -34,6 +39,11 @@ export const BLOCK_HARDNESS = {
   [BLOCKS.STONE]:    4.5,
   [BLOCKS.CONCRETE]: 6.0,
   [BLOCKS.TORCH]:    0.15,
+
+  [BLOCKS.WATER_TANK]:  3.0,
+  [BLOCKS.FOOD_LOCKER]: 3.0,
+  [BLOCKS.GENERATOR]:   4.0,
+  [BLOCKS.BED]:         1.5,
 };
 
 // Which tool is "right" for each block.
@@ -46,6 +56,11 @@ export const BLOCK_PREFERRED_TOOL = {
   [BLOCKS.STONE]:    'pick',
   [BLOCKS.CONCRETE]: 'pick',
   [BLOCKS.TORCH]:    null, // any tool / hands fine
+
+  [BLOCKS.WATER_TANK]:  'pick',
+  [BLOCKS.FOOD_LOCKER]: 'pick',
+  [BLOCKS.GENERATOR]:   'pick',
+  [BLOCKS.BED]:         'axe',
 };
 
 // Effective time for (block, tool). Tool is one of 'pick'|'shovel'|'axe'|null (hands).

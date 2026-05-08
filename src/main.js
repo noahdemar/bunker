@@ -13,6 +13,9 @@ import { HotbarUI, setMiningProgress } from './hotbar.js';
 import { LightManager } from './lights.js';
 import { applyStability } from './stability.js';
 import { FallingBlocks } from './falling.js';
+import { DeviceManager } from './devices.js';
+import { Survival } from './survival.js';
+import { MetersHUD } from './metershud.js';
 
 // --- renderer + scene ---
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
@@ -43,13 +46,17 @@ const hud = new HUD(30 * 60);
 const bomb = new BombSequence(scene, camera, world, atmosphere);
 
 // --- inventory + tools ---
-const inventory = new Inventory(9);
+const inventory = new Inventory(10);
 inventory.add('pickaxe', 1);
 inventory.add('shovel', 1);
 inventory.add('axe', 1);
 inventory.add('concrete', 32);
 inventory.add('wood', 16);
 inventory.add('torch', 8);
+inventory.add('water_tank', 1);
+inventory.add('food_locker', 1);
+inventory.add('generator', 1);
+inventory.add('bed', 1);
 inventory.setActive(0);
 const hotbar = new HotbarUI(inventory);
 const mining = new Mining();
@@ -64,6 +71,12 @@ world.onChange((x, y, z, prev, next) => {
 // --- falling-block entities (cave-in physics) ---
 const falling = new FallingBlocks(scene, world, world.geo, world.materials);
 function spawnFalling(x, y, z, blockId) { falling.spawn(x, y, z, blockId); }
+
+// --- devices + survival ---
+const devices = new DeviceManager(world);
+const survival = new Survival();
+const metersHud = new MetersHUD(survival);
+const survivalTimerEl = document.getElementById('survivaltimer');
 
 // --- pointer lock + input ---
 const overlay = document.getElementById('overlay');
@@ -92,7 +105,8 @@ addEventListener('keydown', (e) => {
     case 'Space': input.Space = true; break;
   }
   if (e.code.startsWith('Digit')) {
-    const idx = parseInt(e.code.slice(5), 10) - 1;
+    let idx = parseInt(e.code.slice(5), 10) - 1;
+    if (idx === -1) idx = 9; // '0' → slot 10
     if (idx >= 0 && idx < inventory.slots.length) {
       inventory.setActive(idx);
       mining.cancel();
@@ -209,13 +223,38 @@ function tick() {
     );
     bomb.detonate(epi);
     setTimeout(() => {
-      const survived = isPlayerSealed();
-      hud.showResult(survived);
-      document.exitPointerLock?.();
-      locked = false;
+      if (!isPlayerSealed()) {
+        hud.showResult('died-exposed');
+        document.exitPointerLock?.();
+        locked = false;
+      } else {
+        // Sealed → enter survival sim. Meters drain; nearby devices replenish.
+        survival.arm();
+        survivalTimerEl.style.display = 'block';
+      }
     }, 6500);
   }
   bomb.update(dt);
+
+  // Survival sim runs once armed (post-bomb).
+  if (survival.armed && !survival.dead && !hud.gameOver) {
+    if (survival.update(dt, devices, player.position)) {
+      hud.showResult('died-' + survival.deathCause);
+      document.exitPointerLock?.();
+      locked = false;
+    } else {
+      const m = Math.floor(survival.survivalTime / 60);
+      const s = Math.floor(survival.survivalTime % 60);
+      survivalTimerEl.textContent = `SURVIVAL ${m}:${s.toString().padStart(2, '0')}`;
+      // 10-minute survival window → rescue.
+      if (survival.survivalTime >= 600) {
+        hud.showResult('rescued');
+        document.exitPointerLock?.();
+        locked = false;
+      }
+    }
+  }
+  metersHud.update();
 
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
