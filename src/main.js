@@ -18,6 +18,7 @@ import { Survival } from './survival.js';
 import { MetersHUD } from './metershud.js';
 import { BlockOutline } from './blockoutline.js';
 import { PowerNetwork } from './power.js';
+import { tryPlaceDoor, tryToggleDoor, removeDoor, isDoorBlock } from './doors.js';
 
 // --- renderer + scene ---
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
@@ -62,6 +63,8 @@ inventory.add('water_tank', 1);
 inventory.add('food_locker', 1);
 inventory.add('generator', 1);
 inventory.add('bed', 1);
+inventory.add('door', 2);
+inventory.add('vault_door', 1);
 inventory.setActive(0);
 const hotbar = new HotbarUI(inventory);
 const mining = new Mining();
@@ -140,6 +143,14 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (hotbar.isInventoryOpen()) return;
+  // Toggle door under crosshair.
+  if (e.code === 'KeyT' && locked) {
+    const r = currentRaycast();
+    if (r && isDoorBlock(world.terrain.blockAt(r.hit.x, r.hit.y, r.hit.z))) {
+      tryToggleDoor(world, r.hit.x, r.hit.y, r.hit.z);
+      return;
+    }
+  }
   switch (e.code) {
     case 'KeyW': input.W = true; break;
     case 'KeyA': input.A = true; break;
@@ -195,6 +206,16 @@ addEventListener('mousedown', (e) => {
     const pz0 = Math.floor(player.position.z - player.RADIUS);
     const pz1 = Math.floor(player.position.z + player.RADIUS);
     if (p.x >= px0 && p.x <= px1 && p.y >= py0 && p.y <= py1 && p.z >= pz0 && p.z <= pz1) return;
+
+    // Multi-cell doors take a different placement path.
+    if (def.multiCell) {
+      const placer = { x: player.position.x, y: player.position.y, z: player.position.z, yaw: player.yaw };
+      if (tryPlaceDoor(world, placer, p, def.multiCell.type)) {
+        inventory.consumeActive();
+      }
+      return;
+    }
+
     world.setBlock(p.x, p.y, p.z, def.blockId);
     inventory.consumeActive();
     // Mid-air placements with no chain to bedrock collapse and fall.
@@ -250,8 +271,14 @@ function tickMining(dt) {
   if (mining.tick(dt)) {
     const drop = dropFor(r.hit.id);
     const mx = r.hit.x, my = r.hit.y, mz = r.hit.z;
-    world.setBlock(mx, my, mz, BLOCKS.AIR);
-    if (drop) inventory.add(drop, 1);
+    if (isDoorBlock(r.hit.id)) {
+      // Whole door comes apart; one item refunded.
+      const itemId = removeDoor(world, mx, my, mz);
+      if (itemId) inventory.add(itemId, 1);
+    } else {
+      world.setBlock(mx, my, mz, BLOCKS.AIR);
+      if (drop) inventory.add(drop, 1);
+    }
     mining.cancel();
     setMiningProgress(0);
     // Stability: pulled material may de-anchor neighbors; cave-in blocks fall as entities.

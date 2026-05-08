@@ -23,6 +23,8 @@ export const ITEM_DEFS = {
   food_locker: { name: 'Food Locker', stack: 4, blockId: BLOCKS.FOOD_LOCKER, label: 'FOD', color: '#604032' },
   generator:   { name: 'Generator',   stack: 4, blockId: BLOCKS.GENERATOR,   label: 'GEN', color: '#404045' },
   bed:         { name: 'Bed',         stack: 4, blockId: BLOCKS.BED,         label: 'BED', color: '#a04030' },
+  door:        { name: 'Door',        stack: 4, blockId: BLOCKS.DOOR_CLOSED,  label: 'DOR', color: '#705030', multiCell: { type: 'door' } },
+  vault_door:  { name: 'Vault Door',  stack: 2, blockId: BLOCKS.VAULT_CLOSED, label: 'VLT', color: '#404045', multiCell: { type: 'vault_door' } },
 };
 
 // Reverse: blockId -> itemId.
@@ -48,6 +50,10 @@ export const BLOCK_HARDNESS = {
   [BLOCKS.BED]:         1.5,
   [BLOCKS.BUTTRESS]:    1.5,
   [BLOCKS.WIRE]:        0.3,
+  [BLOCKS.DOOR_CLOSED]:  1.5,
+  [BLOCKS.DOOR_OPEN]:    1.5,
+  [BLOCKS.VAULT_CLOSED]: 6.0,
+  [BLOCKS.VAULT_OPEN]:   6.0,
 };
 
 // Which tool is "right" for each block.
@@ -67,6 +73,10 @@ export const BLOCK_PREFERRED_TOOL = {
   [BLOCKS.BED]:         'axe',
   [BLOCKS.BUTTRESS]:    'axe',
   [BLOCKS.WIRE]:        null,
+  [BLOCKS.DOOR_CLOSED]:  'axe',
+  [BLOCKS.DOOR_OPEN]:    'axe',
+  [BLOCKS.VAULT_CLOSED]: 'pick',
+  [BLOCKS.VAULT_OPEN]:   'pick',
 };
 
 // Right-tool multipliers — pickaxe is 3x faster than the other tools' right-tool bonus.
@@ -82,6 +92,8 @@ export function miningTime(blockId, tool) {
 
 // Whether this block, when broken, yields an item (some — e.g. leaves — could yield nothing).
 export function dropFor(blockId) {
-  // Default: drop the block itself as an item.
+  // Door variants always drop the corresponding door item, regardless of open/closed.
+  if (blockId === BLOCKS.DOOR_CLOSED  || blockId === BLOCKS.DOOR_OPEN)  return 'door';
+  if (blockId === BLOCKS.VAULT_CLOSED || blockId === BLOCKS.VAULT_OPEN) return 'vault_door';
   return BLOCK_TO_ITEM[blockId] ?? null;
 }

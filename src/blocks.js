@@ -15,11 +15,16 @@ export const BLOCKS = {
   BED:         12,
   BUTTRESS:    13,
   WIRE:        14,
+  DOOR_CLOSED:  15,
+  DOOR_OPEN:    16,
+  VAULT_CLOSED: 17,
+  VAULT_OPEN:   18,
 };
 
 export const BLOCK_NAMES = [
   'air', 'grass', 'dirt', 'stone', 'sand', 'wood', 'leaves', 'concrete',
   'torch', 'water_tank', 'food_locker', 'generator', 'bed', 'buttress', 'wire',
+  'door_closed', 'door_open', 'vault_closed', 'vault_open',
 ];
 
 // Set of blocks that act as electrical nodes for the power network. Generators are

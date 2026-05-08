@@ -23,6 +23,10 @@ const MAT_COST = {
   [BLOCKS.LEAVES]:   99,
   [BLOCKS.TORCH]:    99,
   [BLOCKS.WIRE]:     99,
+  [BLOCKS.DOOR_CLOSED]:  99,
+  [BLOCKS.DOOR_OPEN]:    99,
+  [BLOCKS.VAULT_CLOSED]: 99,
+  [BLOCKS.VAULT_OPEN]:   99,
   // devices: solid manufactured objects, behave like stone
   [BLOCKS.WATER_TANK]:  1,
   [BLOCKS.FOOD_LOCKER]: 1,
@@ -153,6 +157,8 @@ function findUnstable(world, cx, cy, cz) {
     const id = world.terrain.blockAt(x, y, z);
     if (id === BLOCKS.AIR) continue;
     if (id === BLOCKS.LEAVES || id === BLOCKS.TORCH || id === BLOCKS.WIRE) continue;
+    if (id === BLOCKS.DOOR_CLOSED || id === BLOCKS.DOOR_OPEN
+        || id === BLOCKS.VAULT_CLOSED || id === BLOCKS.VAULT_OPEN) continue;
     const k = `${x},${y},${z}`;
     if (!cant.has(k)) out.push([x, y, z]);
   }

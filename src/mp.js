@@ -263,6 +263,8 @@ class BunkerMPGame extends netplayjs.Game {
         applyStability(this.world, placeEvt.x, placeEvt.y, placeEvt.z, null, MP_STABILITY_LIMIT);
       }
 
+      ps.applyToggleDoor(input, this.world);
+
       if (ps.survival.armed && !ps.survival.dead) {
         ps.survival.update(DT, this.devices, ps.position);
         if (ps.survival.dead) ps.alive = false;

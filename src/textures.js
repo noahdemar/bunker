@@ -251,6 +251,98 @@ function generatorTopTex() {
   return texFromCanvas(c);
 }
 
+function doorClosedTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.fillStyle = '#604025';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  speckle(ctx, [96, 64, 36], 16);
+  // vertical planks
+  ctx.strokeStyle = 'rgba(40,28,12,0.55)';
+  ctx.lineWidth = 1;
+  for (const x of [SIZE * 0.25, SIZE * 0.50, SIZE * 0.75]) {
+    ctx.beginPath();
+    ctx.moveTo(x, 2);
+    ctx.lineTo(x, SIZE - 2);
+    ctx.stroke();
+  }
+  // metal hinges + handle
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(SIZE * 0.06, SIZE * 0.18, SIZE * 0.10, 4);
+  ctx.fillRect(SIZE * 0.06, SIZE * 0.78, SIZE * 0.10, 4);
+  ctx.fillStyle = '#cfa040';
+  ctx.fillRect(SIZE * 0.84, SIZE * 0.46, 5, 8);
+  bevel(ctx, 0.30);
+  return texFromCanvas(c);
+}
+function doorOpenTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // Two thin vertical jambs at left/right edges, suggesting the door has swung aside.
+  ctx.fillStyle = '#604025';
+  ctx.fillRect(0, 0, SIZE * 0.07, SIZE);
+  ctx.fillRect(SIZE * 0.93, 0, SIZE * 0.07, SIZE);
+  // hinge marks
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(0, SIZE * 0.18, SIZE * 0.07, 4);
+  ctx.fillRect(0, SIZE * 0.78, SIZE * 0.07, 4);
+  return texFromCanvas(c);
+}
+
+function vaultClosedTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.fillStyle = '#3a3a40';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  speckle(ctx, [70, 70, 76], 14);
+  // big central wheel/disc
+  const cx = SIZE / 2, cy = SIZE / 2;
+  const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, SIZE * 0.20);
+  grad.addColorStop(0, '#7a7a82');
+  grad.addColorStop(1, '#34343a');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, SIZE * 0.20, 0, Math.PI * 2);
+  ctx.fill();
+  // spoke marks on the wheel
+  ctx.strokeStyle = 'rgba(20,20,24,0.7)';
+  ctx.lineWidth = 1;
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * SIZE * 0.06, cy + Math.sin(a) * SIZE * 0.06);
+    ctx.lineTo(cx + Math.cos(a) * SIZE * 0.18, cy + Math.sin(a) * SIZE * 0.18);
+    ctx.stroke();
+  }
+  // rivets in corners and edge midpoints
+  for (const [px, py] of [
+    [SIZE * 0.10, SIZE * 0.10], [SIZE * 0.90, SIZE * 0.10],
+    [SIZE * 0.10, SIZE * 0.90], [SIZE * 0.90, SIZE * 0.90],
+    [SIZE * 0.50, SIZE * 0.10], [SIZE * 0.50, SIZE * 0.90],
+    [SIZE * 0.10, SIZE * 0.50], [SIZE * 0.90, SIZE * 0.50],
+  ]) {
+    const g = ctx.createRadialGradient(px, py, 0.5, px, py, 4);
+    g.addColorStop(0, '#a8a8b0');
+    g.addColorStop(0.7, '#3a3a40');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+  }
+  bevel(ctx, 0.36);
+  return texFromCanvas(c);
+}
+function vaultOpenTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // Metal frame at left/right edges (door swung aside)
+  ctx.fillStyle = '#3a3a40';
+  ctx.fillRect(0, 0, SIZE * 0.09, SIZE);
+  ctx.fillRect(SIZE - SIZE * 0.09, 0, SIZE * 0.09, SIZE);
+  // edge rivets
+  ctx.fillStyle = '#7a7a82';
+  ctx.fillRect(SIZE * 0.02, SIZE * 0.18, SIZE * 0.05, 4);
+  ctx.fillRect(SIZE * 0.02, SIZE * 0.78, SIZE * 0.05, 4);
+  ctx.fillRect(SIZE - SIZE * 0.07, SIZE * 0.18, SIZE * 0.05, 4);
+  ctx.fillRect(SIZE - SIZE * 0.07, SIZE * 0.78, SIZE * 0.05, 4);
+  return texFromCanvas(c);
+}
+
 function wireSideTex() {
   const [c, ctx] = makeCanvas();
   ctx.clearRect(0, 0, SIZE, SIZE);
@@ -490,6 +582,22 @@ export function makeBlockMaterials() {
     roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide,
   });
   materials[BLOCKS.WIRE] = split(wireSide, wireTop, wireTop);
+
+  // Doors — closed is solid wood, open is alphaTest jambs only.
+  const doorClosed = new THREE.MeshStandardMaterial({ map: doorClosedTex(), roughness: 0.85 });
+  const doorOpen = new THREE.MeshStandardMaterial({
+    map: doorOpenTex(), transparent: true, alphaTest: 0.5, roughness: 0.85, side: THREE.DoubleSide,
+  });
+  materials[BLOCKS.DOOR_CLOSED] = all(doorClosed);
+  materials[BLOCKS.DOOR_OPEN]   = all(doorOpen);
+
+  // Vault doors — same idea but heavier metal.
+  const vaultClosed = new THREE.MeshStandardMaterial({ map: vaultClosedTex(), roughness: 0.55, metalness: 0.5 });
+  const vaultOpen = new THREE.MeshStandardMaterial({
+    map: vaultOpenTex(), transparent: true, alphaTest: 0.5, roughness: 0.55, metalness: 0.5, side: THREE.DoubleSide,
+  });
+  materials[BLOCKS.VAULT_CLOSED] = all(vaultClosed);
+  materials[BLOCKS.VAULT_OPEN]   = all(vaultOpen);
 
   return materials;
 }

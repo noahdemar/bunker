@@ -138,14 +138,16 @@ export class World {
     for (const fn of this.changeListeners) fn(x, y, z, prev, id);
   }
 
-  // Solid for movement collision. Leaves, lights, buttresses, and wires are passable.
+  // Solid for movement collision. Decorative / open passages are passable.
   isSolid(x, y, z) {
     const id = this.terrain.blockAt(x, y, z);
     return id !== BLOCKS.AIR
       && id !== BLOCKS.LEAVES
       && id !== BLOCKS.TORCH
       && id !== BLOCKS.BUTTRESS
-      && id !== BLOCKS.WIRE;
+      && id !== BLOCKS.WIRE
+      && id !== BLOCKS.DOOR_OPEN
+      && id !== BLOCKS.VAULT_OPEN;
   }
 
   // Voxel raycast (Amanatides–Woo). Returns { hit:{x,y,z,id}, place:{x,y,z}, normal:[dx,dy,dz] } or null.

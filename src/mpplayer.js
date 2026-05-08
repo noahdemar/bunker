@@ -4,6 +4,7 @@ import { Mining } from './mining.js';
 import { Survival } from './survival.js';
 import { BLOCKS } from './blocks.js';
 import { ITEM_DEFS, dropFor } from './items.js';
+import { tryPlaceDoor, tryToggleDoor, removeDoor, isDoorBlock } from './doors.js';
 
 // Per-player gameplay state for multiplayer. Holds position, kinematics, look angles,
 // inventory, mining progress, and survival meters. Pure data + small methods — does
@@ -44,6 +45,8 @@ export class MPPlayer {
     this.inventory.add('food_locker', 1);
     this.inventory.add('generator', 1);
     this.inventory.add('bed', 1);
+    this.inventory.add('door', 2);
+    this.inventory.add('vault_door', 1);
     this.inventory.setActive(0);
 
     this.mining = new Mining();
@@ -176,10 +179,27 @@ export class MPPlayer {
     }
     if (this.mining.tick(dt)) {
       const { x, y, z } = r.hit;
-      world.setBlock(x, y, z, BLOCKS.AIR);
-      if (drop) this.inventory.add(drop, 1);
+      if (isDoorBlock(r.hit.id)) {
+        const itemId = removeDoor(world, x, y, z);
+        if (itemId) this.inventory.add(itemId, 1);
+      } else {
+        world.setBlock(x, y, z, BLOCKS.AIR);
+        if (drop) this.inventory.add(drop, 1);
+      }
       this.mining.cancel();
       return { x, y, z, broke: true };
+    }
+    return null;
+  }
+
+  // Toggle the door under the crosshair (T). Returns truthy if a door flipped.
+  applyToggleDoor(input, world) {
+    if (!input.keysPressed?.['t']) return null;
+    const r = this.raycast(world);
+    if (!r) return null;
+    if (!isDoorBlock(world.terrain.blockAt(r.hit.x, r.hit.y, r.hit.z))) return null;
+    if (tryToggleDoor(world, r.hit.x, r.hit.y, r.hit.z)) {
+      return { x: r.hit.x, y: r.hit.y, z: r.hit.z, toggled: true };
     }
     return null;
   }
@@ -193,6 +213,14 @@ export class MPPlayer {
     if (!blockSlot) return null;
     const def = ITEM_DEFS[blockSlot.item];
     const p = r.place;
+    // Multi-cell doors / vault doors take a different placement path.
+    if (def.multiCell) {
+      if (tryPlaceDoor(world, this, p, def.multiCell.type)) {
+        this.inventory.consumeActive();
+        return { x: p.x, y: p.y, z: p.z, placed: true };
+      }
+      return null;
+    }
     // Don't place inside the player AABB.
     const px0 = Math.floor(this.x - RADIUS), px1 = Math.floor(this.x + RADIUS);
     const py0 = Math.floor(this.y - HEIGHT), py1 = Math.floor(this.y + 0.2);
