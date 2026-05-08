@@ -16,6 +16,7 @@ import { FallingBlocks } from './falling.js';
 import { DeviceManager } from './devices.js';
 import { Survival } from './survival.js';
 import { MetersHUD } from './metershud.js';
+import { BlockOutline } from './blockoutline.js';
 
 // --- renderer + scene ---
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
@@ -40,13 +41,14 @@ const atmosphere = new Atmosphere(scene, renderer);
 const seed = Math.floor(Math.random() * 100000);
 const terrain = makeTerrain(seed, 48);
 const world = new World(scene, terrain);
+const blockOutline = new BlockOutline(scene);
 const player = new Player(camera, world);
 player.spawnOnSurface(terrain);
 const hud = new HUD(30 * 60);
 const bomb = new BombSequence(scene, camera, world, atmosphere);
 
 // --- inventory + tools ---
-const inventory = new Inventory(12);
+const inventory = new Inventory(18, 9);
 inventory.add('pickaxe', 1);
 inventory.add('shovel', 1);
 inventory.add('axe', 1);
@@ -72,6 +74,17 @@ world.onChange((x, y, z, prev, next) => {
 // --- falling-block entities (cave-in physics) ---
 const falling = new FallingBlocks(scene, world, world.geo, world.materials);
 function spawnFalling(x, y, z, blockId) { falling.spawn(x, y, z, blockId); }
+const SP_STABILITY_LIMIT = { maxCells: 32, maxIters: 2, shouldCollapse: (x, y, z) => !isPlayerSupportCell(x, y, z) };
+
+function isPlayerSupportCell(x, y, z) {
+  const px0 = Math.floor(player.position.x - player.RADIUS - 0.75);
+  const px1 = Math.floor(player.position.x + player.RADIUS + 0.75);
+  const py0 = Math.floor(player.position.y - player.HEIGHT - 1);
+  const py1 = Math.floor(player.position.y + 0.2);
+  const pz0 = Math.floor(player.position.z - player.RADIUS - 0.75);
+  const pz1 = Math.floor(player.position.z + player.RADIUS + 0.75);
+  return x >= px0 && x <= px1 && y >= py0 && y <= py1 && z >= pz0 && z <= pz1;
+}
 
 // --- devices + survival ---
 const devices = new DeviceManager(world);
@@ -85,19 +98,44 @@ let locked = false;
 const input = { W: false, A: false, S: false, D: false, Space: false };
 const mouse = { left: false, right: false };
 
+function clearGameplayInput() {
+  input.W = false;
+  input.A = false;
+  input.S = false;
+  input.D = false;
+  input.Space = false;
+  mouse.left = false;
+  mining.cancel();
+  setMiningProgress(0);
+}
+
 overlay.addEventListener('click', () => {
-  if (!hud.fired) canvas.requestPointerLock();
+  if (!hud.fired && !hotbar.isInventoryOpen()) canvas.requestPointerLock();
 });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
-  if (!hud.fired) overlay.classList.toggle('hidden', locked);
-  if (!locked) { mouse.left = false; mining.cancel(); setMiningProgress(0); }
+  if (!hud.fired) overlay.classList.toggle('hidden', locked || hotbar.isInventoryOpen());
+  if (!locked) clearGameplayInput();
 });
 document.addEventListener('mousemove', (e) => {
   if (locked) player.applyMouse(e.movementX, e.movementY);
 });
 
 addEventListener('keydown', (e) => {
+  if (e.code === 'KeyE') {
+    if (hud.gameOver) return;
+    if (!hotbar.isInventoryOpen() && !overlay.classList.contains('hidden')) return;
+    e.preventDefault();
+    const open = hotbar.toggleInventory();
+    clearGameplayInput();
+    if (open) {
+      document.exitPointerLock?.();
+    } else {
+      canvas.requestPointerLock();
+    }
+    return;
+  }
+  if (hotbar.isInventoryOpen()) return;
   switch (e.code) {
     case 'KeyW': input.W = true; break;
     case 'KeyA': input.A = true; break;
@@ -107,8 +145,7 @@ addEventListener('keydown', (e) => {
   }
   if (e.code.startsWith('Digit')) {
     let idx = parseInt(e.code.slice(5), 10) - 1;
-    if (idx === -1) idx = 9; // '0' → slot 10
-    if (idx >= 0 && idx < inventory.slots.length) {
+    if (idx >= 0 && idx < inventory.hotbarSize) {
       inventory.setActive(idx);
       mining.cancel();
       setMiningProgress(0);
@@ -116,6 +153,7 @@ addEventListener('keydown', (e) => {
   }
 });
 addEventListener('keyup', (e) => {
+  if (hotbar.isInventoryOpen()) return;
   switch (e.code) {
     case 'KeyW': input.W = false; break;
     case 'KeyA': input.A = false; break;
@@ -125,9 +163,9 @@ addEventListener('keyup', (e) => {
   }
 });
 addEventListener('wheel', (e) => {
-  if (!locked) return;
+  if (!locked || hotbar.isInventoryOpen()) return;
   const dir = Math.sign(e.deltaY);
-  const next = (inventory.active + dir + inventory.slots.length) % inventory.slots.length;
+  const next = (inventory.active + dir + inventory.hotbarSize) % inventory.hotbarSize;
   inventory.setActive(next);
   mining.cancel();
   setMiningProgress(0);
@@ -135,7 +173,7 @@ addEventListener('wheel', (e) => {
 
 addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('mousedown', (e) => {
-  if (!locked) return;
+  if (!locked || hotbar.isInventoryOpen()) return;
   if (e.button === 0) mouse.left = true;
   if (e.button === 2) {
     // single-action place
@@ -156,7 +194,7 @@ addEventListener('mousedown', (e) => {
     world.setBlock(p.x, p.y, p.z, def.blockId);
     inventory.consumeActive();
     // Mid-air placements with no chain to bedrock collapse and fall.
-    applyStability(world, p.x, p.y, p.z, spawnFalling);
+    applyStability(world, p.x, p.y, p.z, spawnFalling, SP_STABILITY_LIMIT);
   }
 });
 addEventListener('mouseup', (e) => {
@@ -172,6 +210,16 @@ function currentRaycast() {
   const dir = new THREE.Vector3();
   camera.getWorldDirection(dir);
   return world.raycast(origin, dir, 6);
+}
+
+function updateBlockOutline() {
+  if (!locked || hotbar.isInventoryOpen()) {
+    blockOutline.hide();
+    return;
+  }
+  const r = currentRaycast();
+  if (r) blockOutline.show(r.hit.x, r.hit.y, r.hit.z);
+  else blockOutline.hide();
 }
 
 function tickMining(dt) {
@@ -203,7 +251,7 @@ function tickMining(dt) {
     mining.cancel();
     setMiningProgress(0);
     // Stability: pulled material may de-anchor neighbors; cave-in blocks fall as entities.
-    applyStability(world, mx, my, mz, spawnFalling);
+    applyStability(world, mx, my, mz, spawnFalling, SP_STABILITY_LIMIT);
   } else {
     setMiningProgress(mining.progress());
   }
@@ -214,11 +262,12 @@ const clock = new THREE.Clock();
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
 
-  if (locked || bomb.detonated) player.update(input, dt);
+  if (!hotbar.isInventoryOpen() && (locked || bomb.detonated)) player.update(input, dt);
   atmosphere.followTarget(player.position);
   falling.update(dt);
 
-  if (locked) tickMining(dt);
+  if (locked && !hotbar.isInventoryOpen()) tickMining(dt);
+  updateBlockOutline();
 
   if (hud.update(dt)) {
     const epi = new THREE.Vector3(

@@ -3,8 +3,9 @@ import { ITEM_DEFS } from './items.js';
 // Slot-based inventory. Each slot is null or { item, count }.
 // First slots typically hold tools; everything else stacks blocks up to ITEM_DEFS[item].stack.
 export class Inventory {
-  constructor(slotCount = 9) {
+  constructor(slotCount = 18, hotbarSize = 9) {
     this.slots = new Array(slotCount).fill(null);
+    this.hotbarSize = Math.min(hotbarSize, slotCount);
     this.active = 0;
     this.listeners = [];
   }
@@ -13,12 +14,22 @@ export class Inventory {
   _notify() { for (const fn of this.listeners) fn(this); }
 
   setActive(idx) {
-    if (idx < 0 || idx >= this.slots.length) return;
+    if (idx < 0 || idx >= this.hotbarSize) return;
     this.active = idx;
     this._notify();
   }
 
   getActive() { return this.slots[this.active]; }
+
+  swapSlots(a, b) {
+    if (a < 0 || a >= this.slots.length) return;
+    if (b < 0 || b >= this.slots.length) return;
+    if (a === b) return;
+    const tmp = this.slots[a];
+    this.slots[a] = this.slots[b];
+    this.slots[b] = tmp;
+    this._notify();
+  }
 
   activeTool() {
     const s = this.getActive();

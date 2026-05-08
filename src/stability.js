@@ -162,17 +162,22 @@ function findUnstable(world, cx, cy, cz) {
 // `onCollapse(x, y, z, prevId)` fires for each cell as it transitions to air, so callers
 // can spawn falling-block entities that animate the cave-in.
 // Returns total cells collapsed.
-export function applyStability(world, cx, cy, cz, onCollapse) {
+export function applyStability(world, cx, cy, cz, onCollapse, options = {}) {
+  const maxCells = options.maxCells ?? Infinity;
+  const maxIters = options.maxIters ?? MAX_CASCADE_ITERS;
+  const shouldCollapse = options.shouldCollapse;
   let total = 0;
-  for (let i = 0; i < MAX_CASCADE_ITERS; i++) {
+  for (let i = 0; i < maxIters; i++) {
     const unstable = findUnstable(world, cx, cy, cz);
     if (unstable.length === 0) break;
     for (const [x, y, z] of unstable) {
+      if (total >= maxCells) return total;
+      if (shouldCollapse && !shouldCollapse(x, y, z)) continue;
       const prev = world.terrain.blockAt(x, y, z);
       world.setBlock(x, y, z, BLOCKS.AIR);
       if (onCollapse) onCollapse(x, y, z, prev);
+      total++;
     }
-    total += unstable.length;
   }
   return total;
 }

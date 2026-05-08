@@ -4,40 +4,62 @@ import { Atmosphere } from './atmosphere.js';
 import { makeTerrain } from './terrain.js';
 import { World } from './world.js';
 import { BLOCKS } from './blocks.js';
+import { LightManager } from './lights.js';
+import { applyStability } from './stability.js';
+import { DeviceManager } from './devices.js';
+import { HotbarUI, setMiningProgress } from './hotbar.js';
+import { MetersHUD } from './metershud.js';
+import { MPPlayer } from './mpplayer.js';
+import { BlockOutline } from './blockoutline.js';
 
-// Multiplayer Bunker — keyboard-only, third-person, lockstep-deterministic.
-// Each peer runs the full game; netplayjs syncs inputs/state via WebRTC.
+// Multiplayer Bunker — full single-player feature set ported into a netplayjs Game.
 //
-// Trimmed feature set vs single-player so state-per-tick stays small:
-//   - Shared procedural world (seed = 1337)
-//   - Player avatars (cube), auto-orient toward movement
-//   - Keyboard place/break of CONCRETE one cell forward
-//   - No survival sim, no inventory, no falling-block physics, no bomb sequence
+// Mouse-look uses the FPS-example pattern: pointerLock=true makes DefaultInput
+// .mousePosition accumulate movementX/Y under the lock; each player's last seen
+// mousePosition is stored in MPPlayer state and the delta becomes yaw/pitch.
 //
-// Run two browser tabs, share the host link printed by netplayjs.
+// netplayjs's DefaultInput doesn't sync mouse buttons, so we bind hold-to-mine to
+// F and place-block to R (everything else matches single-player).
+//
+// State that's synced: timer, bomb-phase machine, per-player transform/alive state,
+// and terrain edits. Local-only: camera shake, flash overlay timing, UI, and lights.
 
-const PLAYER_COLORS = [0x4080c0, 0xc04040, 0x40c060, 0xc0a040];
-const SPEED = 5.5;
-const GRAVITY = 22;
-const JUMP_V = 8.0;
-const PLAYER_HALF_HEIGHT = 0.8;
 const SEED = 1337;
 const WORLD_R = 30;
+const COUNTDOWN = 30 * 60;
+const BOMB_FLASH_MS = 400;
+const BOMB_DESTROY_MS = 6000;
+const SURVIVAL_GOAL = 600;        // 10-minute rescue window
+const BOMB_RADIUS = 38;
+const MP_STABILITY_LIMIT = { maxCells: 10, maxIters: 1 };
+
+const COLORS = [0x4a90d0, 0xd05050, 0x6ac060, 0xd0a040, 0x9050c0, 0xe0a0c0];
+
+function virtualKeyCodeFor(key) {
+  switch (key) {
+    case 'f': return { code: 'KeyF', keyCode: 70 };
+    case 'r': return { code: 'KeyR', keyCode: 82 };
+    default: return { code: key, keyCode: 0 };
+  }
+}
 
 class BunkerMPGame extends netplayjs.Game {
-  static timestep = 1000 / 30;
+  static timestep = 1000 / 60;
   static canvasSize = { width: 1280, height: 720 };
+  static pointerLock = true;
   static deterministic = true;
 
   constructor(canvas, players) {
     super();
     this.players = players;
     this.localPlayer = players.find(p => p.isLocalPlayer());
+    this.canvas = canvas;
+    this._virtualMouseKeys = { f: false, r: false };
+    this._movementKeys = ['w', 'a', 's', 'd', ' '];
 
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.display = 'block';
-    canvas.style.background = '#000';
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setSize(BunkerMPGame.canvasSize.width, BunkerMPGame.canvasSize.height, false);
@@ -49,6 +71,36 @@ class BunkerMPGame extends netplayjs.Game {
     this.atmosphere = new Atmosphere(this.scene, this.renderer);
     this.terrain = makeTerrain(SEED, WORLD_R);
     this.world = new World(this.scene, this.terrain);
+    this.blockOutline = new BlockOutline(this.scene);
+    this.lights = new LightManager(this.scene, 40);
+    this.devices = new DeviceManager(this.world);
+
+    // Torch lights via world.onChange — works for placement, mining, cave-in, and
+    // post-deserialize edit replay (all routes converge on world.setBlock).
+    this.world.onChange((x, y, z, prev, next) => {
+      if (prev === BLOCKS.TORCH && next !== BLOCKS.TORCH) this.lights.remove(x, y, z);
+      if (prev !== BLOCKS.TORCH && next === BLOCKS.TORCH) this.lights.add(x, y, z);
+    });
+
+    // Per-player gameplay state. Remote players also get a small avatar mesh so the
+    // local view sees them moving around.
+    this.mp = new Map();
+    this.avatars = new Map();
+    const baseH = this.terrain.baseHeight(0, 0) ?? 1;
+    for (let i = 0; i < players.length; i++) {
+      const id = players[i].getID();
+      const ps = new MPPlayer(i * 1.5 - 0.75 + 0.5, baseH + 2.5, 0.5);
+      this.mp.set(id, ps);
+      if (id !== this.localPlayer.getID()) {
+        const mat = new THREE.MeshStandardMaterial({
+          color: COLORS[i % COLORS.length], roughness: 0.7,
+        });
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.6, 0.7), mat);
+        mesh.castShadow = true;
+        this.scene.add(mesh);
+        this.avatars.set(id, mesh);
+      }
+    }
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -56,137 +108,305 @@ class BunkerMPGame extends netplayjs.Game {
       0.1, 500,
     );
 
-    this.avatars = new Map(); // playerID -> { mesh, x, y, z, vy, yaw }
-    const baseH = this.terrain.baseHeight(0, 0) ?? 1;
-    for (let i = 0; i < players.length; i++) {
-      const id = players[i].getID();
-      const mat = new THREE.MeshStandardMaterial({
-        color: PLAYER_COLORS[i % PLAYER_COLORS.length],
-        roughness: 0.7,
-      });
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.6, 0.7), mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.scene.add(mesh);
-      this.avatars.set(id, {
-        mesh,
-        x: i * 1.5 - 0.75,
-        y: baseH + 2.5,
-        z: 0.5,
-        vy: 0,
-        yaw: 0,
-      });
-    }
+    // Synced game state.
+    this.timer = COUNTDOWN;
+    this.bombPhase = 'NONE';     // NONE | FLASH | DESTROY | ARMED
+    this.bombT = 0;
+    this.epicenter = null;
+
+    // Local-only HUD wired to local player.
+    const localPS = this.mp.get(this.localPlayer.getID());
+    this.hotbar = new HotbarUI(localPS.inventory, {
+      onSwap: (from, to) => this._queueInventorySwap(from, to),
+    });
+    this.metersHud = new MetersHUD(localPS.survival);
+    this.timerEl = document.getElementById('timer');
+    this.survivalTimerEl = document.getElementById('survivaltimer');
+    this.flashEl = document.getElementById('flash');
+    this.toastEl = document.getElementById('toast');
+    this.overlayEl = document.getElementById('overlay');
+
+    this._toastTimer = null;
+    this._localShake = 0;
+    this._appliedApocalypse = false;
+    this._lastBombPhase = 'NONE';
+
+    document.addEventListener('contextmenu', this._handleContextMenu);
+    document.addEventListener('mousedown', this._handleMouseDown);
+    document.addEventListener('mouseup', this._handleMouseUp);
+    document.addEventListener('keydown', this._handleKeyDown, true);
+    document.addEventListener('pointerlockchange', this._handlePointerLockChange);
+    window.addEventListener('blur', this._releaseVirtualMouseKeys);
   }
 
-  // Lockstep tick — applies each player's input to its avatar deterministically.
+  _showToast(text, ttl = 1400) {
+    this.toastEl.textContent = text;
+    this.toastEl.classList.add('visible');
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => this.toastEl.classList.remove('visible'), ttl);
+  }
+
+  _isMouseInputActive() {
+    return document.pointerLockElement === this.canvas;
+  }
+
+  _dispatchVirtualKey(type, key) {
+    const { code, keyCode } = virtualKeyCodeFor(key);
+    const evt = new KeyboardEvent(type, {
+      key,
+      code,
+      bubbles: true,
+      cancelable: true,
+    });
+    try {
+      Object.defineProperty(evt, 'keyCode', { get: () => keyCode });
+      Object.defineProperty(evt, 'which', { get: () => keyCode });
+    } catch {}
+    const target = document.body ?? document;
+    target.dispatchEvent(evt);
+  }
+
+  _setVirtualMouseKey(key, down) {
+    if (this._virtualMouseKeys[key] === down) return;
+    this._virtualMouseKeys[key] = down;
+    this._dispatchVirtualKey(down ? 'keydown' : 'keyup', key);
+  }
+
+  _queueInventorySwap(from, to) {
+    const key = `invswap:${from}:${to}`;
+    this._dispatchVirtualKey('keydown', key);
+    this._dispatchVirtualKey('keyup', key);
+  }
+
+  _releaseMovementKeys() {
+    for (const key of this._movementKeys) this._dispatchVirtualKey('keyup', key);
+  }
+
+  _releaseVirtualMouseKeys = () => {
+    this._setVirtualMouseKey('f', false);
+    this._setVirtualMouseKey('r', false);
+  };
+
+  _clearLocalGameplayInput() {
+    this._releaseVirtualMouseKeys();
+    this._releaseMovementKeys();
+  }
+
+  _handleKeyDown = (e) => {
+    if (e.code !== 'KeyE') return;
+    if (!this.hotbar) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    const open = this.hotbar.toggleInventory();
+    this._clearLocalGameplayInput();
+    if (open) {
+      document.exitPointerLock?.();
+    } else {
+      this.canvas.requestPointerLock();
+    }
+  };
+
+  _handleContextMenu = (e) => {
+    if (this._isMouseInputActive()) e.preventDefault();
+  };
+
+  _handleMouseDown = (e) => {
+    if (this.hotbar?.isInventoryOpen()) return;
+    if (!this._isMouseInputActive()) return;
+    if (e.button === 0) {
+      e.preventDefault();
+      this._setVirtualMouseKey('f', true);
+    }
+    if (e.button === 2) {
+      e.preventDefault();
+      this._setVirtualMouseKey('r', true);
+    }
+  };
+
+  _handleMouseUp = (e) => {
+    if (e.button === 0) this._setVirtualMouseKey('f', false);
+    if (e.button === 2) this._setVirtualMouseKey('r', false);
+  };
+
+  _handlePointerLockChange = () => {
+    if (!this._isMouseInputActive()) this._clearLocalGameplayInput();
+  };
+
+  _showOverlay(title, body) {
+    this.overlayEl.classList.remove('hidden');
+    this.overlayEl.querySelector('.panel').innerHTML =
+      `<h1>${title}</h1><p>${body}</p>`
+      + `<p style="opacity:0.7;margin-top:14px;">Reload to play again.</p>`;
+  }
+
   tick(playerInputs) {
     const DT = BunkerMPGame.timestep / 1000;
+    const localID = this.localPlayer.getID();
 
     for (const [player, input] of playerInputs) {
-      const av = this.avatars.get(player.getID());
-      if (!av) continue;
+      const id = player.getID();
+      const ps = this.mp.get(id);
+      if (!ps || !ps.alive) continue;
 
-      const wasd = input.wasd();          // {x: D-A, y: W-S}
-      let mx = wasd.x, mz = -wasd.y;      // forward (W) goes -Z
-      const mag = Math.hypot(mx, mz);
-      if (mag > 0) {
-        mx /= mag; mz /= mag;
-        av.x += mx * SPEED * DT;
-        av.z += mz * SPEED * DT;
-        av.yaw = Math.atan2(mx, -mz);
+      ps.applyLook(input);
+      ps.applyMovement(input, this.world, DT);
+      ps.applyInventoryActions(input);
+      ps.applyHotbar(input);
+
+      const mineEvt = ps.applyMining(input, this.world, DT);
+      if (mineEvt?.broke) {
+        applyStability(this.world, mineEvt.x, mineEvt.y, mineEvt.z, null, MP_STABILITY_LIMIT);
+      }
+      if (mineEvt?.invFull && id === localID) {
+        this._showToast('INVENTORY FULL');
       }
 
-      // Jump
-      const grounded = this._grounded(av);
-      if (input.keysPressed?.[' '] && grounded) av.vy = JUMP_V;
-
-      // Gravity + simple ground collide
-      av.vy -= GRAVITY * DT;
-      av.y += av.vy * DT;
-      const fx = Math.floor(av.x), fz = Math.floor(av.z);
-      const feetY = Math.floor(av.y - PLAYER_HALF_HEIGHT);
-      if (this.world.isSolid(fx, feetY, fz)) {
-        av.y = feetY + 1 + PLAYER_HALF_HEIGHT;
-        av.vy = 0;
+      const placeEvt = ps.applyPlace(input, this.world);
+      if (placeEvt?.placed) {
+        applyStability(this.world, placeEvt.x, placeEvt.y, placeEvt.z, null, MP_STABILITY_LIMIT);
       }
 
-      // Edits — single press only (avoid stream while held).
-      const fwd = this._forwardCell(av, 1);
-      if (input.keysPressed?.['e'] && this._inBounds(fwd)) {
-        if (this.terrain.blockAt(fwd.x, fwd.y, fwd.z) === BLOCKS.AIR) {
-          this.world.setBlock(fwd.x, fwd.y, fwd.z, BLOCKS.CONCRETE);
-        }
+      if (ps.survival.armed && !ps.survival.dead) {
+        ps.survival.update(DT, this.devices, ps.position);
+        if (ps.survival.dead) ps.alive = false;
       }
-      if (input.keysPressed?.['q'] && this._inBounds(fwd)) {
-        if (this.terrain.blockAt(fwd.x, fwd.y, fwd.z) !== BLOCKS.AIR) {
-          this.world.setBlock(fwd.x, fwd.y, fwd.z, BLOCKS.AIR);
-        }
-      }
-
-      av.mesh.position.set(av.x, av.y - 0.1, av.z);
-      av.mesh.rotation.y = av.yaw;
     }
-  }
 
-  _grounded(av) {
-    const fx = Math.floor(av.x), fz = Math.floor(av.z);
-    const below = Math.floor(av.y - PLAYER_HALF_HEIGHT - 0.05);
-    return this.world.isSolid(fx, below, fz);
-  }
-
-  _forwardCell(av, dist) {
-    const cx = av.x + Math.sin(av.yaw) * dist;
-    const cz = av.z - Math.cos(av.yaw) * dist;
-    return { x: Math.floor(cx), y: Math.floor(av.y), z: Math.floor(cz) };
-  }
-
-  _inBounds(c) {
-    const r = this.terrain.radius;
-    return Math.abs(c.x) <= r && Math.abs(c.z) <= r && c.y >= -8 && c.y <= 24;
+    // Bomb state machine — pre-bomb counts down, then phases through flash/destroy/armed.
+    if (this.bombPhase === 'NONE') {
+      this.timer = Math.max(0, this.timer - DT);
+      if (this.timer <= 0) {
+        this.bombPhase = 'FLASH';
+        this.bombT = 0;
+        this.epicenter = { x: 0, y: 30, z: 0 };
+        this._localShake = 1.4;
+      }
+    } else {
+      this.bombT += DT * 1000;
+      if (this.bombPhase === 'FLASH' && this.bombT > BOMB_FLASH_MS) {
+        runDestruction(this.world, this.epicenter, BOMB_RADIUS);
+        this.bombPhase = 'DESTROY';
+        this.bombT = 0;
+      } else if (this.bombPhase === 'DESTROY' && this.bombT > BOMB_DESTROY_MS) {
+        for (const ps of this.mp.values()) {
+          if (!ps.alive) continue;
+          if (isPlayerSealed(this.world, ps, this.terrain)) {
+            ps.survival.arm();
+          } else {
+            ps.alive = false;
+            ps.survival.dead = true;
+            ps.survival.deathCause = 'exposed';
+          }
+        }
+        this.bombPhase = 'ARMED';
+        this.bombT = 0;
+      }
+    }
   }
 
   draw(canvas) {
-    const av = this.avatars.get(this.localPlayer.getID());
-    if (av) {
-      // Third-person camera trailing the player along their yaw.
-      const angle = av.yaw + Math.PI;
-      this.camera.position.set(
-        av.x + Math.sin(angle) * 6.5,
-        av.y + 4.5,
-        av.z + Math.cos(angle) * 6.5,
-      );
-      this.camera.lookAt(av.x, av.y + 0.5, av.z);
-      this.atmosphere.followTarget(new THREE.Vector3(av.x, av.y, av.z));
+    const localPS = this.mp.get(this.localPlayer.getID());
+
+    // Remote avatars
+    for (const [id, mesh] of this.avatars) {
+      const ps = this.mp.get(id);
+      if (!ps) continue;
+      mesh.position.set(ps.x, ps.y - 0.85, ps.z);
+      mesh.rotation.y = ps.yaw;
+      mesh.visible = ps.alive;
     }
+
+    // Local first-person camera
+    this.camera.position.set(localPS.x, localPS.y, localPS.z);
+    this.camera.rotation.set(localPS.pitch, localPS.yaw, 0, 'YXZ');
+
+    // Local-only effects driven by bombPhase
+    if (this.bombPhase === 'FLASH' && this.bombT < 220) {
+      this.flashEl.style.transition = 'opacity 0.05s linear';
+      this.flashEl.style.opacity = '1';
+    } else if (this.bombPhase !== 'NONE') {
+      this.flashEl.style.transition = 'opacity 3.5s ease-out';
+      this.flashEl.style.opacity = '0';
+    }
+    if ((this.bombPhase === 'DESTROY' || this.bombPhase === 'ARMED') && !this._appliedApocalypse) {
+      this.atmosphere.applyApocalypse();
+      this._appliedApocalypse = true;
+    }
+    if (this._isMouseInputActive() && !this.hotbar?.isInventoryOpen() && localPS.alive) {
+      const r = localPS.raycast(this.world);
+      if (r) this.blockOutline.show(r.hit.x, r.hit.y, r.hit.z);
+      else this.blockOutline.hide();
+    } else {
+      this.blockOutline.hide();
+    }
+    if (this._localShake > 0) {
+      const s = this._localShake * 0.35;
+      this.camera.position.x += (Math.random() - 0.5) * s;
+      this.camera.position.y += (Math.random() - 0.5) * s;
+      this.camera.position.z += (Math.random() - 0.5) * s;
+      this._localShake = Math.max(0, this._localShake - 0.6 * (BunkerMPGame.timestep / 1000));
+    }
+
+    this.atmosphere.followTarget(new THREE.Vector3(localPS.x, localPS.y, localPS.z));
     this.renderer.render(this.scene, this.camera);
+
+    // Local-only HUD
+    const t = this.timer;
+    const m = Math.floor(t / 60), s = Math.floor(t % 60);
+    this.timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+    this.timerEl.classList.toggle('warn', this.bombPhase === 'NONE' && t <= 60 && t > 10);
+    this.timerEl.classList.toggle('critical', this.bombPhase === 'NONE' && t <= 10);
+
+    setMiningProgress(localPS.mining.isActive() ? localPS.mining.progress() : 0);
+    this.metersHud.update();
+
+    if (this.bombPhase === 'ARMED') {
+      this.survivalTimerEl.style.display = 'block';
+      const st = localPS.survival.survivalTime;
+      this.survivalTimerEl.textContent =
+        `SURVIVAL ${Math.floor(st / 60)}:${Math.floor(st % 60).toString().padStart(2, '0')}`;
+    } else {
+      this.survivalTimerEl.style.display = 'none';
+    }
+
+    if (!localPS.alive) {
+      this._showOverlay('YOU DIED', overlayBodyForCause(localPS.survival.deathCause));
+    } else if (this.bombPhase === 'ARMED' && localPS.survival.survivalTime >= SURVIVAL_GOAL) {
+      this._showOverlay('RESCUED', 'Your bunker held. Help has arrived.');
+    } else {
+      this.overlayEl.classList.add('hidden');
+    }
   }
 
-  // State sync — terrain edits (sparse map) + per-player kinematics.
   serialize() {
-    const avatars = {};
-    for (const [id, av] of this.avatars) {
-      avatars[id] = { x: av.x, y: av.y, z: av.z, vy: av.vy, yaw: av.yaw };
-    }
+    const players = {};
+    for (const [id, ps] of this.mp) players[id] = ps.serialize();
     const edits = [];
     for (const [k, id] of this.terrain.edits) {
       const [x, y, z] = k.split(',').map(Number);
       edits.push([x, y, z, id]);
     }
-    return { avatars, edits };
+    return {
+      timer: this.timer,
+      bombPhase: this.bombPhase, bombT: this.bombT, epicenter: this.epicenter,
+      players, edits,
+    };
   }
 
   deserialize(state) {
-    for (const idStr in state.avatars) {
+    this.timer = state.timer;
+    this.bombPhase = state.bombPhase;
+    this.bombT = state.bombT;
+    this.epicenter = state.epicenter;
+
+    for (const idStr in state.players) {
       const id = Number(idStr);
-      const av = this.avatars.get(id);
-      if (!av) continue;
-      const s = state.avatars[idStr];
-      av.x = s.x; av.y = s.y; av.z = s.z; av.vy = s.vy; av.yaw = s.yaw;
-      av.mesh.position.set(av.x, av.y - 0.1, av.z);
-      av.mesh.rotation.y = av.yaw;
+      const ps = this.mp.get(id);
+      if (ps) ps.deserialize(state.players[idStr]);
     }
-    // Diff edits — apply incoming, revert any local edit not in incoming.
+
+    // Apply edits diff against the current world.
     const incoming = new Map();
     for (const [x, y, z, id] of state.edits) {
       incoming.set(`${x},${y},${z}`, id);
@@ -203,6 +423,69 @@ class BunkerMPGame extends netplayjs.Game {
         this.world.setBlock(x, y, z, id);
       }
     }
+  }
+}
+
+// Radial destruction — same shape as single-player BombSequence._destroy().
+function runDestruction(world, epicenter, RAD) {
+  const t = world.terrain;
+  const R = t.radius;
+  const toRemove = [];
+  for (let x = -R; x <= R; x++)
+  for (let z = -R; z <= R; z++) {
+    const baseH = t.baseHeight(x, z);
+    let topY = baseH;
+    for (let y = baseH + 1; y <= 26; y++) {
+      if (t.blockAt(x, y, z) !== BLOCKS.AIR) topY = y;
+    }
+    for (let y = topY; y >= baseH - 4; y--) {
+      const id = t.blockAt(x, y, z);
+      if (id === BLOCKS.AIR) continue;
+      const dx = x - epicenter.x, dy = y - epicenter.y, dz = z - epicenter.z;
+      const d3 = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (d3 > RAD) continue;
+      const isResistant = (id === BLOCKS.CONCRETE || id === BLOCKS.STONE);
+      if (isResistant && d3 > RAD * 0.45) continue;
+      toRemove.push([x, y, z]);
+    }
+  }
+  for (const [x, y, z] of toRemove) world.setBlock(x, y, z, BLOCKS.AIR);
+}
+
+// BFS through air cells from the player's standing cell — escape outside the bubble
+// means the player isn't sealed in by surrounding blocks.
+function isPlayerSealed(world, ps, terrain) {
+  const start = {
+    x: Math.floor(ps.x),
+    y: Math.floor(ps.y - 1),
+    z: Math.floor(ps.z),
+  };
+  if (world.isSolid(start.x, start.y, start.z)) return true;
+  const visited = new Set();
+  const queue = [start];
+  const RADIUS2 = 22 * 22;
+  const NB = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  while (queue.length) {
+    const c = queue.shift();
+    const k = `${c.x},${c.y},${c.z}`;
+    if (visited.has(k)) continue;
+    visited.add(k);
+    const dx = c.x - start.x, dy = c.y - start.y, dz = c.z - start.z;
+    if (dx * dx + dy * dy + dz * dz > RADIUS2) return false;
+    for (const [nx, ny, nz] of NB) {
+      const ax = c.x + nx, ay = c.y + ny, az = c.z + nz;
+      if (terrain.blockAt(ax, ay, az) === BLOCKS.AIR) queue.push({ x: ax, y: ay, z: az });
+    }
+  }
+  return true;
+}
+
+function overlayBodyForCause(cause) {
+  switch (cause) {
+    case 'exposed':    return 'The bomb caught you in the open.';
+    case 'thirst':     return 'You died of thirst — the water tank ran dry.';
+    case 'starvation': return 'You died of starvation — the food locker ran dry.';
+    default:           return 'Game over.';
   }
 }
 
