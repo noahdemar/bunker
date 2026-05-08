@@ -326,42 +326,45 @@ function bedTopTex() {
 
 function torchSideTex() {
   const [c, ctx] = makeCanvas();
-  // warm fiery base across the whole face
-  ctx.fillStyle = '#a83410';
-  ctx.fillRect(0, 0, SIZE, SIZE);
-  speckle(ctx, [184, 80, 28], 28);
-  // central plume — bright yellow → orange → red
-  const fx = SIZE * 0.5, fy = SIZE * 0.45;
-  const grad = ctx.createRadialGradient(fx, fy * 0.7, 1, fx, fy, SIZE * 0.55);
-  grad.addColorStop(0,    '#fffce0');
-  grad.addColorStop(0.25, '#ffe080');
-  grad.addColorStop(0.55, '#ff8a30');
-  grad.addColorStop(1,    'rgba(120,30,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, SIZE, SIZE);
-  // flicker streaks
-  ctx.fillStyle = 'rgba(255,220,140,0.45)';
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // wooden stick — central column, bottom 60%
+  const x0 = SIZE * 0.42, w = SIZE * 0.16;
+  ctx.fillStyle = '#62421e';
+  ctx.fillRect(x0, SIZE * 0.40, w, SIZE * 0.50);
+  // grain
   for (let i = 0; i < 6; i++) {
-    const tx = SIZE * 0.30 + Math.random() * SIZE * 0.40;
-    const ty = SIZE * 0.10 + Math.random() * SIZE * 0.30;
-    ctx.fillRect(tx, ty, 2, 4 + Math.random() * 6);
+    ctx.fillStyle = `rgba(40,28,12,${0.3 + Math.random() * 0.3})`;
+    ctx.fillRect(x0, SIZE * 0.40 + Math.random() * SIZE * 0.50, w, 1);
   }
-  bevel(ctx, 0.16);
+  // flame plume — outer glow then bright core
+  const fx = SIZE * 0.5, fy = SIZE * 0.22;
+  let grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.22);
+  grad.addColorStop(0,    '#ffffe0');
+  grad.addColorStop(0.4,  '#ffa030');
+  grad.addColorStop(0.85, '#a02000');
+  grad.addColorStop(1,    'rgba(160,32,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(SIZE * 0.22, 0, SIZE * 0.56, SIZE * 0.45);
+  grad = ctx.createRadialGradient(fx, fy - 2, 1, fx, fy, SIZE * 0.10);
+  grad.addColorStop(0,    '#fffceb');
+  grad.addColorStop(0.7,  '#ffe080');
+  grad.addColorStop(1,    'rgba(255,160,40,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(SIZE * 0.32, SIZE * 0.06, SIZE * 0.36, SIZE * 0.30);
   return texFromCanvas(c);
 }
 function torchEmissiveTex() {
   const [c, ctx] = makeCanvas();
-  // fully-on emissive across the whole face, peaking in the center
-  const fx = SIZE * 0.5, fy = SIZE * 0.5;
-  ctx.fillStyle = '#603018';
-  ctx.fillRect(0, 0, SIZE, SIZE);
-  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.7);
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // emissive only where the flame is — keeps stick non-glowing
+  const fx = SIZE * 0.5, fy = SIZE * 0.22;
+  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.22);
   grad.addColorStop(0,    '#ffffff');
-  grad.addColorStop(0.35, '#ffd680');
-  grad.addColorStop(0.75, '#a04018');
-  grad.addColorStop(1,    '#301008');
+  grad.addColorStop(0.4,  '#ffd870');
+  grad.addColorStop(0.9,  '#552200');
+  grad.addColorStop(1,    'rgba(0,0,0,0)');
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.fillRect(SIZE * 0.22, 0, SIZE * 0.56, SIZE * 0.45);
   return texFromCanvas(c);
 }
 function concreteTex() {
@@ -395,8 +398,11 @@ export function makeBlockMaterials() {
     map: torchSideTex(),
     emissiveMap: torchEmissiveTex(),
     emissive: 0xffcc70,
-    emissiveIntensity: 2.4,
+    emissiveIntensity: 2.0,
+    transparent: true,
+    alphaTest: 0.3,
     roughness: 0.6,
+    side: THREE.DoubleSide,
   });
 
   // Helper: faces array [+x, -x, +y, -y, +z, -z]

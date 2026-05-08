@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "netplayjs": "^0.4.1",
     "three": "^0.160.0"
   },
   "devDependencies": {
