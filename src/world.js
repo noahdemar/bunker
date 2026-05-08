@@ -138,10 +138,14 @@ export class World {
     for (const fn of this.changeListeners) fn(x, y, z, prev, id);
   }
 
-  // Solid for movement collision. Leaves, torches, and buttresses are passable.
+  // Solid for movement collision. Leaves, lights, buttresses, and wires are passable.
   isSolid(x, y, z) {
     const id = this.terrain.blockAt(x, y, z);
-    return id !== BLOCKS.AIR && id !== BLOCKS.LEAVES && id !== BLOCKS.TORCH && id !== BLOCKS.BUTTRESS;
+    return id !== BLOCKS.AIR
+      && id !== BLOCKS.LEAVES
+      && id !== BLOCKS.TORCH
+      && id !== BLOCKS.BUTTRESS
+      && id !== BLOCKS.WIRE;
   }
 
   // Voxel raycast (Amanatides–Woo). Returns { hit:{x,y,z,id}, place:{x,y,z}, normal:[dx,dy,dz] } or null.

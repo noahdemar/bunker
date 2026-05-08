@@ -22,6 +22,7 @@ const MAT_COST = {
   [BLOCKS.SAND]:     3,
   [BLOCKS.LEAVES]:   99,
   [BLOCKS.TORCH]:    99,
+  [BLOCKS.WIRE]:     99,
   // devices: solid manufactured objects, behave like stone
   [BLOCKS.WATER_TANK]:  1,
   [BLOCKS.FOOD_LOCKER]: 1,
@@ -106,7 +107,7 @@ function findUnstable(world, cx, cy, cz) {
       const ux = x + dx, uy = y + dy, uz = z + dz;
       if (ux < x0 || ux > x1 || uy < y0 || uy > y1 || uz < z0 || uz > z1) continue;
       const id = world.terrain.blockAt(ux, uy, uz);
-      if (id === BLOCKS.AIR || id === BLOCKS.LEAVES || id === BLOCKS.TORCH || id === BLOCKS.BUTTRESS) continue;
+      if (id === BLOCKS.AIR || id === BLOCKS.LEAVES || id === BLOCKS.TORCH || id === BLOCKS.BUTTRESS || id === BLOCKS.WIRE) continue;
       const k = `${ux},${uy},${uz}`;
       if (!cant.has(k)) { cant.set(k, 0); pqInsert(pq, 0, ux, uy, uz); }
     }
@@ -151,7 +152,7 @@ function findUnstable(world, cx, cy, cz) {
   for (let z = z0 + 1; z < z1; z++) {
     const id = world.terrain.blockAt(x, y, z);
     if (id === BLOCKS.AIR) continue;
-    if (id === BLOCKS.LEAVES || id === BLOCKS.TORCH) continue;
+    if (id === BLOCKS.LEAVES || id === BLOCKS.TORCH || id === BLOCKS.WIRE) continue;
     const k = `${x},${y},${z}`;
     if (!cant.has(k)) out.push([x, y, z]);
   }

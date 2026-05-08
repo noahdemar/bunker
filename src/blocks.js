@@ -14,12 +14,23 @@ export const BLOCKS = {
   GENERATOR:   11,
   BED:         12,
   BUTTRESS:    13,
+  WIRE:        14,
 };
 
 export const BLOCK_NAMES = [
   'air', 'grass', 'dirt', 'stone', 'sand', 'wood', 'leaves', 'concrete',
-  'torch', 'water_tank', 'food_locker', 'generator', 'bed', 'buttress',
+  'torch', 'water_tank', 'food_locker', 'generator', 'bed', 'buttress', 'wire',
 ];
+
+// Set of blocks that act as electrical nodes for the power network. Generators are
+// sources; lights (BLOCKS.TORCH, semantically electric lamps now) are loads; wires
+// are pure conduits. Any pair of electrical blocks within 6 cells of each other are
+// auto-connected into the same network.
+export const ELECTRICAL_BLOCKS = new Set([
+  BLOCKS.GENERATOR,
+  BLOCKS.TORCH,
+  BLOCKS.WIRE,
+]);
 
 // Set of device blocks (placeable survival equipment).
 export const DEVICE_BLOCKS = new Set([

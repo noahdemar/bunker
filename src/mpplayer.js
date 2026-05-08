@@ -39,6 +39,7 @@ export class MPPlayer {
     this.inventory.add('wood', 12);
     this.inventory.add('buttress', 6);
     this.inventory.add('torch', 8);
+    this.inventory.add('wire', 16);
     this.inventory.add('water_tank', 1);
     this.inventory.add('food_locker', 1);
     this.inventory.add('generator', 1);

@@ -17,6 +17,7 @@ import { DeviceManager } from './devices.js';
 import { Survival } from './survival.js';
 import { MetersHUD } from './metershud.js';
 import { BlockOutline } from './blockoutline.js';
+import { PowerNetwork } from './power.js';
 
 // --- renderer + scene ---
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
@@ -56,6 +57,7 @@ inventory.add('concrete', 16);
 inventory.add('wood', 12);
 inventory.add('buttress', 6);
 inventory.add('torch', 8);
+inventory.add('wire', 16);
 inventory.add('water_tank', 1);
 inventory.add('food_locker', 1);
 inventory.add('generator', 1);
@@ -63,13 +65,6 @@ inventory.add('bed', 1);
 inventory.setActive(0);
 const hotbar = new HotbarUI(inventory);
 const mining = new Mining();
-
-// --- lighting (driven by torch placements via world.onChange) ---
-const lights = new LightManager(scene, 40);
-world.onChange((x, y, z, prev, next) => {
-  if (prev === BLOCKS.TORCH && next !== BLOCKS.TORCH) lights.remove(x, y, z);
-  if (prev !== BLOCKS.TORCH && next === BLOCKS.TORCH) lights.add(x, y, z);
-});
 
 // --- falling-block entities (cave-in physics) ---
 const falling = new FallingBlocks(scene, world, world.geo, world.materials);
@@ -91,6 +86,15 @@ const devices = new DeviceManager(world);
 const survival = new Survival();
 const metersHud = new MetersHUD(survival);
 const survivalTimerEl = document.getElementById('survivaltimer');
+
+// --- electric power network + lighting ---
+// Lights only emit when a generator (with charge > 0) is reachable through the
+// 6-block proximity graph of generator/wire/light cells. PowerNetwork rebuilds the
+// graph whenever an electrical block is placed/mined/collapsed, and refresh() is
+// called each tick so lights flick off the moment a generator's tank runs dry.
+const power = new PowerNetwork(world, devices);
+const lights = new LightManager(scene, 40);
+lights.setPowerSource(power);
 
 // --- pointer lock + input ---
 const overlay = document.getElementById('overlay');
@@ -268,6 +272,7 @@ function tick() {
 
   if (locked && !hotbar.isInventoryOpen()) tickMining(dt);
   updateBlockOutline();
+  power.refresh();
 
   if (hud.update(dt)) {
     const epi = new THREE.Vector3(

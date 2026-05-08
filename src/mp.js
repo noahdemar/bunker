@@ -7,6 +7,7 @@ import { BLOCKS } from './blocks.js';
 import { LightManager } from './lights.js';
 import { applyStability } from './stability.js';
 import { DeviceManager } from './devices.js';
+import { PowerNetwork } from './power.js';
 import { HotbarUI, setMiningProgress } from './hotbar.js';
 import { MetersHUD } from './metershud.js';
 import { MPPlayer } from './mpplayer.js';
@@ -72,15 +73,10 @@ class BunkerMPGame extends netplayjs.Game {
     this.terrain = makeTerrain(SEED, WORLD_R);
     this.world = new World(this.scene, this.terrain);
     this.blockOutline = new BlockOutline(this.scene);
-    this.lights = new LightManager(this.scene, 40);
     this.devices = new DeviceManager(this.world);
-
-    // Torch lights via world.onChange — works for placement, mining, cave-in, and
-    // post-deserialize edit replay (all routes converge on world.setBlock).
-    this.world.onChange((x, y, z, prev, next) => {
-      if (prev === BLOCKS.TORCH && next !== BLOCKS.TORCH) this.lights.remove(x, y, z);
-      if (prev !== BLOCKS.TORCH && next === BLOCKS.TORCH) this.lights.add(x, y, z);
-    });
+    this.power = new PowerNetwork(this.world, this.devices);
+    this.lights = new LightManager(this.scene, 40);
+    this.lights.setPowerSource(this.power);
 
     // Per-player gameplay state. Remote players also get a small avatar mesh so the
     // local view sees them moving around.
@@ -272,6 +268,10 @@ class BunkerMPGame extends netplayjs.Game {
         if (ps.survival.dead) ps.alive = false;
       }
     }
+
+    // Power network — recompute generator-driven lights once per tick so charge
+    // depletion (driven by survival) flicks lights off when fuel runs out.
+    this.power.refresh();
 
     // Bomb state machine — pre-bomb counts down, then phases through flash/destroy/armed.
     if (this.bombPhase === 'NONE') {

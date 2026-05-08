@@ -15,8 +15,9 @@ export const ITEM_DEFS = {
   grass:    { name: 'Grass',    stack: 80, blockId: BLOCKS.GRASS,    label: 'GRS', color: '#5a8240' },
   sand:     { name: 'Sand',     stack: 80, blockId: BLOCKS.SAND,     label: 'SND', color: '#dcc896' },
   leaves:   { name: 'Leaves',   stack: 80, blockId: BLOCKS.LEAVES,   label: 'LF',  color: '#466632' },
-  torch:    { name: 'Torch',    stack: 80, blockId: BLOCKS.TORCH,    label: 'TCH', color: '#ffaa44' },
+  torch:    { name: 'Light',    stack: 80, blockId: BLOCKS.TORCH,    label: 'LMP', color: '#ffe080' },
   buttress: { name: 'Buttress', stack: 80, blockId: BLOCKS.BUTTRESS, label: 'BUT', color: '#62421e' },
+  wire:     { name: 'Wire',     stack: 80, blockId: BLOCKS.WIRE,     label: 'WIR', color: '#c08040' },
 
   water_tank:  { name: 'Water Tank',  stack: 4, blockId: BLOCKS.WATER_TANK,  label: 'TNK', color: '#3070a0' },
   food_locker: { name: 'Food Locker', stack: 4, blockId: BLOCKS.FOOD_LOCKER, label: 'FOD', color: '#604032' },
@@ -46,6 +47,7 @@ export const BLOCK_HARDNESS = {
   [BLOCKS.GENERATOR]:   4.0,
   [BLOCKS.BED]:         1.5,
   [BLOCKS.BUTTRESS]:    1.5,
+  [BLOCKS.WIRE]:        0.3,
 };
 
 // Which tool is "right" for each block.
@@ -64,6 +66,7 @@ export const BLOCK_PREFERRED_TOOL = {
   [BLOCKS.GENERATOR]:   'pick',
   [BLOCKS.BED]:         'axe',
   [BLOCKS.BUTTRESS]:    'axe',
+  [BLOCKS.WIRE]:        null,
 };
 
 // Right-tool multipliers — pickaxe is 3x faster than the other tools' right-tool bonus.

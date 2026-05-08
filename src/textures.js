@@ -251,6 +251,38 @@ function generatorTopTex() {
   return texFromCanvas(c);
 }
 
+function wireSideTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // central thin copper strand
+  const x0 = SIZE * 0.46, w = SIZE * 0.08;
+  ctx.fillStyle = '#c88848';
+  ctx.fillRect(x0, 0, w, SIZE);
+  // copper highlight
+  ctx.fillStyle = '#ffd090';
+  ctx.fillRect(x0 + 1, 0, 1, SIZE);
+  // brass insulation rings every 8px
+  ctx.fillStyle = '#5a4030';
+  for (let y = 4; y < SIZE; y += 8) {
+    ctx.fillRect(x0 - 1, y, w + 2, 2);
+  }
+  return texFromCanvas(c);
+}
+function wireTopTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.06;
+  ctx.fillStyle = '#c88848';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#5a4030';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+  return texFromCanvas(c);
+}
+
 function buttressSideTex() {
   const [c, ctx] = makeCanvas();
   ctx.clearRect(0, 0, SIZE, SIZE);
@@ -447,6 +479,17 @@ export function makeBlockMaterials() {
     map: buttressTopTex(), transparent: true, alphaTest: 0.5, roughness: 0.85, side: THREE.DoubleSide,
   });
   materials[BLOCKS.BUTTRESS] = split(buttressSide, buttressTop, buttressTop);
+
+  // Wire — same alphaTest treatment as buttress, but thinner and copper-colored.
+  const wireSide = new THREE.MeshStandardMaterial({
+    map: wireSideTex(), transparent: true, alphaTest: 0.5,
+    roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide,
+  });
+  const wireTop = new THREE.MeshStandardMaterial({
+    map: wireTopTex(), transparent: true, alphaTest: 0.5,
+    roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide,
+  });
+  materials[BLOCKS.WIRE] = split(wireSide, wireTop, wireTop);
 
   return materials;
 }
