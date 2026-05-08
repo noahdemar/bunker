@@ -24,7 +24,7 @@ const MOVE_SPEED = 5.4;
 const MOUSE_SENS = 0.0025;
 
 export class MPPlayer {
-  constructor(spawnX = 0.5, spawnY = 14, spawnZ = 0.5) {
+  constructor(spawnX = 0.5, spawnY = 14, spawnZ = 0.5, opts = {}) {
     this.x = spawnX; this.y = spawnY; this.z = spawnZ;
     this.vx = 0; this.vy = 0; this.vz = 0;
     this.yaw = 0; this.pitch = 0;
@@ -33,20 +33,23 @@ export class MPPlayer {
     this.alive = true;
 
     this.inventory = new Inventory(18, 9);
-    this.inventory.add('pickaxe', 1);
-    this.inventory.add('shovel', 1);
-    this.inventory.add('axe', 1);
-    this.inventory.add('concrete', 16);
-    this.inventory.add('wood', 12);
-    this.inventory.add('buttress', 6);
-    this.inventory.add('torch', 8);
-    this.inventory.add('wire', 16);
-    this.inventory.add('water_tank', 1);
-    this.inventory.add('food_locker', 1);
-    this.inventory.add('generator', 1);
-    this.inventory.add('bed', 1);
-    this.inventory.add('door', 2);
-    this.inventory.add('vault_door', 1);
+    if (!opts.skipLoadout) {
+      // Default loadout — used when there's no lobby (single-player path or quick test).
+      this.inventory.add('pickaxe', 1);
+      this.inventory.add('shovel', 1);
+      this.inventory.add('axe', 1);
+      this.inventory.add('concrete', 16);
+      this.inventory.add('wood', 12);
+      this.inventory.add('buttress', 6);
+      this.inventory.add('torch', 8);
+      this.inventory.add('wire', 16);
+      this.inventory.add('water_tank', 1);
+      this.inventory.add('food_locker', 1);
+      this.inventory.add('generator', 1);
+      this.inventory.add('bed', 1);
+      this.inventory.add('door', 2);
+      this.inventory.add('vault_door', 1);
+    }
     this.inventory.setActive(0);
 
     this.mining = new Mining();

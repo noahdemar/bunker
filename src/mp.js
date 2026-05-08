@@ -12,6 +12,8 @@ import { HotbarUI, setMiningProgress } from './hotbar.js';
 import { MetersHUD } from './metershud.js';
 import { MPPlayer } from './mpplayer.js';
 import { BlockOutline } from './blockoutline.js';
+import { applyCartToInventory, catalogItem, totalSpent, allReady, TEAM_BUDGET } from './lobby.js';
+import { LobbyUI } from './lobbyui.js';
 
 // Multiplayer Bunker — full single-player feature set ported into a netplayjs Game.
 //
@@ -85,7 +87,7 @@ class BunkerMPGame extends netplayjs.Game {
     const baseH = this.terrain.baseHeight(0, 0) ?? 1;
     for (let i = 0; i < players.length; i++) {
       const id = players[i].getID();
-      const ps = new MPPlayer(i * 1.5 - 0.75 + 0.5, baseH + 2.5, 0.5);
+      const ps = new MPPlayer(i * 1.5 - 0.75 + 0.5, baseH + 2.5, 0.5, { skipLoadout: true });
       this.mp.set(id, ps);
       if (id !== this.localPlayer.getID()) {
         const mat = new THREE.MeshStandardMaterial({
@@ -105,6 +107,13 @@ class BunkerMPGame extends netplayjs.Game {
     );
 
     // Synced game state.
+    this.gameState = 'LOBBY';    // LOBBY | PLAYING
+    this.lobbyCarts = {};        // playerID → { catalogId: count }
+    this.lobbyReady = {};        // playerID → bool
+    for (const p of players) {
+      this.lobbyCarts[p.getID()] = {};
+      this.lobbyReady[p.getID()] = false;
+    }
     this.timer = COUNTDOWN;
     this.bombPhase = 'NONE';     // NONE | FLASH | DESTROY | ARMED
     this.bombT = 0;
@@ -126,6 +135,18 @@ class BunkerMPGame extends netplayjs.Game {
     this._localShake = 0;
     this._appliedApocalypse = false;
     this._lastBombPhase = 'NONE';
+
+    // Lobby UI — clicks dispatch virtual keys so the actions ride netplayjs's input
+    // sync (same trick as the inventory-swap path).
+    this.lobbyUI = new LobbyUI(this.localPlayer.getID(), (key) => {
+      this._dispatchVirtualKey('keydown', key);
+      this._dispatchVirtualKey('keyup', key);
+    });
+    if (this.gameState === 'LOBBY') {
+      this.lobbyUI.show();
+      document.exitPointerLock?.();
+      this._refreshLobbyUI();
+    }
 
     document.addEventListener('contextmenu', this._handleContextMenu);
     document.addEventListener('mousedown', this._handleMouseDown);
@@ -189,6 +210,7 @@ class BunkerMPGame extends netplayjs.Game {
   }
 
   _handleKeyDown = (e) => {
+    if (this.gameState === 'LOBBY') return;
     if (e.code !== 'KeyE') return;
     if (!this.hotbar) return;
     e.preventDefault();
@@ -208,6 +230,7 @@ class BunkerMPGame extends netplayjs.Game {
   };
 
   _handleMouseDown = (e) => {
+    if (this.gameState === 'LOBBY') return;
     if (this.hotbar?.isInventoryOpen()) return;
     if (!this._isMouseInputActive()) return;
     if (e.button === 0) {
@@ -236,7 +259,73 @@ class BunkerMPGame extends netplayjs.Game {
       + `<p style="opacity:0.7;margin-top:14px;">Reload to play again.</p>`;
   }
 
+  // -- Lobby phase --
+
+  _refreshLobbyUI() {
+    const labels = this.players.map((p, i) => ({
+      id: p.getID(),
+      label: `Player ${i + 1}`,
+    }));
+    this.lobbyUI.update({
+      carts: this.lobbyCarts,
+      ready: this.lobbyReady,
+      players: labels,
+    });
+  }
+
+  _lobbyBuy(playerID, catalogId) {
+    const item = catalogItem(catalogId);
+    if (!item) return;
+    if (totalSpent(this.lobbyCarts) + item.price > TEAM_BUDGET) return;
+    if (!this.lobbyCarts[playerID]) this.lobbyCarts[playerID] = {};
+    this.lobbyCarts[playerID][catalogId] = (this.lobbyCarts[playerID][catalogId] || 0) + 1;
+    this.lobbyReady[playerID] = false; // edits invalidate ready
+  }
+
+  _lobbyUnbuy(playerID, catalogId) {
+    const cart = this.lobbyCarts[playerID];
+    if (!cart || !cart[catalogId]) return;
+    cart[catalogId]--;
+    if (cart[catalogId] <= 0) delete cart[catalogId];
+    this.lobbyReady[playerID] = false;
+  }
+
+  _startGame() {
+    for (const [pid, ps] of this.mp) {
+      applyCartToInventory(ps.inventory, this.lobbyCarts[pid] || {});
+      ps.inventory.setActive(0);
+    }
+    this.gameState = 'PLAYING';
+    this.lobbyUI.hide();
+    // First click after lobby will lock the pointer for the local player.
+  }
+
+  tickLobby(playerInputs) {
+    let changed = false;
+    for (const [player, input] of playerInputs) {
+      const id = player.getID();
+      for (const k of Object.keys(input.keysPressed ?? {})) {
+        const buyMatch = /^lobby:buy:(.+)$/.exec(k);
+        const unbuyMatch = /^lobby:unbuy:(.+)$/.exec(k);
+        if (buyMatch)        { this._lobbyBuy(id, buyMatch[1]); changed = true; }
+        else if (unbuyMatch) { this._lobbyUnbuy(id, unbuyMatch[1]); changed = true; }
+        else if (k === 'lobby:ready') {
+          this.lobbyReady[id] = !this.lobbyReady[id];
+          changed = true;
+        }
+      }
+    }
+    if (changed) this._refreshLobbyUI();
+
+    const ids = Array.from(this.mp.keys());
+    if (allReady(ids, this.lobbyReady)) this._startGame();
+  }
+
   tick(playerInputs) {
+    if (this.gameState === 'LOBBY') {
+      this.tickLobby(playerInputs);
+      return;
+    }
     const DT = BunkerMPGame.timestep / 1000;
     const localID = this.localPlayer.getID();
 
@@ -309,6 +398,16 @@ class BunkerMPGame extends netplayjs.Game {
 
   draw(canvas) {
     const localPS = this.mp.get(this.localPlayer.getID());
+
+    if (this.gameState === 'LOBBY') {
+      // Floating overhead camera so the world is a living backdrop behind the lobby.
+      const t = performance.now() * 0.0002;
+      this.camera.position.set(Math.sin(t) * 16, 22, Math.cos(t) * 16);
+      this.camera.lookAt(0, 6, 0);
+      this.atmosphere.followTarget(new THREE.Vector3(0, 6, 0));
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
 
     // Remote avatars
     for (const [id, mesh] of this.avatars) {
@@ -390,6 +489,9 @@ class BunkerMPGame extends netplayjs.Game {
       edits.push([x, y, z, id]);
     }
     return {
+      gameState: this.gameState,
+      lobbyCarts: this.lobbyCarts,
+      lobbyReady: this.lobbyReady,
       timer: this.timer,
       bombPhase: this.bombPhase, bombT: this.bombT, epicenter: this.epicenter,
       players, edits,
@@ -397,10 +499,21 @@ class BunkerMPGame extends netplayjs.Game {
   }
 
   deserialize(state) {
+    const wasLobby = this.gameState === 'LOBBY';
+    this.gameState = state.gameState ?? this.gameState;
+    if (state.lobbyCarts) this.lobbyCarts = state.lobbyCarts;
+    if (state.lobbyReady) this.lobbyReady = state.lobbyReady;
     this.timer = state.timer;
     this.bombPhase = state.bombPhase;
     this.bombT = state.bombT;
     this.epicenter = state.epicenter;
+
+    if (wasLobby && this.gameState === 'PLAYING') {
+      // Mid-flight transition (host started game while we were still in lobby UI).
+      this.lobbyUI.hide();
+    } else if (this.gameState === 'LOBBY') {
+      this._refreshLobbyUI();
+    }
 
     for (const idStr in state.players) {
       const id = Number(idStr);
