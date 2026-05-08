@@ -1,0 +1,228 @@
+import * as THREE from 'three';
+import { Atmosphere } from './atmosphere.js';
+import { makeTerrain } from './terrain.js';
+import { World } from './world.js';
+import { Player } from './player.js';
+import { HUD } from './hud.js';
+import { BombSequence } from './bomb.js';
+import { BLOCKS } from './blocks.js';
+import { ITEM_DEFS, dropFor } from './items.js';
+import { Inventory } from './inventory.js';
+import { Mining } from './mining.js';
+import { HotbarUI, setMiningProgress } from './hotbar.js';
+
+// --- renderer + scene ---
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const canvas = renderer.domElement;
+document.getElementById('app').appendChild(canvas);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const scene = new THREE.Scene();
+const atmosphere = new Atmosphere(scene, renderer);
+
+const seed = Math.floor(Math.random() * 100000);
+const terrain = makeTerrain(seed, 48);
+const world = new World(scene, terrain);
+const player = new Player(camera, world);
+player.spawnOnSurface(terrain);
+const hud = new HUD(30 * 60);
+const bomb = new BombSequence(scene, camera, world, atmosphere);
+
+// --- inventory + tools ---
+const inventory = new Inventory(9);
+inventory.add('pickaxe', 1);
+inventory.add('shovel', 1);
+inventory.add('axe', 1);
+inventory.add('concrete', 32);
+inventory.setActive(0);
+const hotbar = new HotbarUI(inventory);
+const mining = new Mining();
+
+// --- pointer lock + input ---
+const overlay = document.getElementById('overlay');
+let locked = false;
+const input = { W: false, A: false, S: false, D: false, Space: false };
+const mouse = { left: false, right: false };
+
+overlay.addEventListener('click', () => {
+  if (!hud.fired) canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === canvas;
+  if (!hud.fired) overlay.classList.toggle('hidden', locked);
+  if (!locked) { mouse.left = false; mining.cancel(); setMiningProgress(0); }
+});
+document.addEventListener('mousemove', (e) => {
+  if (locked) player.applyMouse(e.movementX, e.movementY);
+});
+
+addEventListener('keydown', (e) => {
+  switch (e.code) {
+    case 'KeyW': input.W = true; break;
+    case 'KeyA': input.A = true; break;
+    case 'KeyS': input.S = true; break;
+    case 'KeyD': input.D = true; break;
+    case 'Space': input.Space = true; break;
+  }
+  if (e.code.startsWith('Digit')) {
+    const idx = parseInt(e.code.slice(5), 10) - 1;
+    if (idx >= 0 && idx < inventory.slots.length) {
+      inventory.setActive(idx);
+      mining.cancel();
+      setMiningProgress(0);
+    }
+  }
+});
+addEventListener('keyup', (e) => {
+  switch (e.code) {
+    case 'KeyW': input.W = false; break;
+    case 'KeyA': input.A = false; break;
+    case 'KeyS': input.S = false; break;
+    case 'KeyD': input.D = false; break;
+    case 'Space': input.Space = false; break;
+  }
+});
+addEventListener('wheel', (e) => {
+  if (!locked) return;
+  const dir = Math.sign(e.deltaY);
+  const next = (inventory.active + dir + inventory.slots.length) % inventory.slots.length;
+  inventory.setActive(next);
+  mining.cancel();
+  setMiningProgress(0);
+}, { passive: true });
+
+addEventListener('contextmenu', (e) => e.preventDefault());
+addEventListener('mousedown', (e) => {
+  if (!locked) return;
+  if (e.button === 0) mouse.left = true;
+  if (e.button === 2) {
+    // single-action place
+    const r = currentRaycast();
+    if (!r) return;
+    const blockSlot = inventory.activeBlockItem();
+    if (!blockSlot) return;
+    const def = ITEM_DEFS[blockSlot.item];
+    const p = r.place;
+    // don't place inside player AABB
+    const px0 = Math.floor(player.position.x - player.RADIUS);
+    const px1 = Math.floor(player.position.x + player.RADIUS);
+    const py0 = Math.floor(player.position.y - player.HEIGHT);
+    const py1 = Math.floor(player.position.y + 0.2);
+    const pz0 = Math.floor(player.position.z - player.RADIUS);
+    const pz1 = Math.floor(player.position.z + player.RADIUS);
+    if (p.x >= px0 && p.x <= px1 && p.y >= py0 && p.y <= py1 && p.z >= pz0 && p.z <= pz1) return;
+    world.setBlock(p.x, p.y, p.z, def.blockId);
+    inventory.consumeActive();
+  }
+});
+addEventListener('mouseup', (e) => {
+  if (e.button === 0) {
+    mouse.left = false;
+    mining.cancel();
+    setMiningProgress(0);
+  }
+});
+
+function currentRaycast() {
+  const origin = camera.position.clone();
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  return world.raycast(origin, dir, 6);
+}
+
+function tickMining(dt) {
+  if (!mouse.left) {
+    if (mining.isActive()) { mining.cancel(); setMiningProgress(0); }
+    return;
+  }
+  const r = currentRaycast();
+  if (!r) {
+    if (mining.isActive()) { mining.cancel(); setMiningProgress(0); }
+    return;
+  }
+  const tool = inventory.activeTool();
+  if (!mining.matches(r.hit.x, r.hit.y, r.hit.z, r.hit.id, tool)) {
+    mining.start(r.hit.x, r.hit.y, r.hit.z, r.hit.id, tool);
+  }
+  if (mining.tick(dt)) {
+    const drop = dropFor(r.hit.id);
+    world.setBlock(r.hit.x, r.hit.y, r.hit.z, BLOCKS.AIR);
+    if (drop) {
+      const added = inventory.add(drop, 1);
+      if (added === 0) hotbar.showToast('INVENTORY FULL');
+    }
+    mining.cancel();
+    setMiningProgress(0);
+  } else {
+    setMiningProgress(mining.progress());
+  }
+}
+
+// --- main loop ---
+const clock = new THREE.Clock();
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (locked || bomb.detonated) player.update(input, dt);
+  atmosphere.followTarget(player.position);
+
+  if (locked) tickMining(dt);
+
+  if (hud.update(dt)) {
+    const epi = new THREE.Vector3(
+      player.position.x + (Math.random() - 0.5) * 8,
+      player.position.y + 25,
+      player.position.z + (Math.random() - 0.5) * 8,
+    );
+    bomb.detonate(epi);
+    setTimeout(() => {
+      const survived = isPlayerSealed();
+      hud.showResult(survived);
+      document.exitPointerLock?.();
+      locked = false;
+    }, 6500);
+  }
+  bomb.update(dt);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+
+function isPlayerSealed() {
+  const start = {
+    x: Math.floor(player.position.x),
+    y: Math.floor(player.position.y - 1),
+    z: Math.floor(player.position.z),
+  };
+  if (world.isSolid(start.x, start.y, start.z)) return true;
+
+  const visited = new Set();
+  const queue = [start];
+  const RADIUS2 = 22 * 22;
+  const NB = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  while (queue.length) {
+    const c = queue.shift();
+    const k = `${c.x},${c.y},${c.z}`;
+    if (visited.has(k)) continue;
+    visited.add(k);
+    const dx = c.x - start.x, dy = c.y - start.y, dz = c.z - start.z;
+    if (dx*dx + dy*dy + dz*dz > RADIUS2) return false;
+    for (const [nx, ny, nz] of NB) {
+      const ax = c.x + nx, ay = c.y + ny, az = c.z + nz;
+      if (terrain.blockAt(ax, ay, az) === BLOCKS.AIR) queue.push({ x: ax, y: ay, z: az });
+    }
+  }
+  return true;
+}
