@@ -12,8 +12,10 @@ import { HotbarUI, setMiningProgress } from './hotbar.js';
 import { MetersHUD } from './metershud.js';
 import { MPPlayer } from './mpplayer.js';
 import { BlockOutline } from './blockoutline.js';
-import { applyCartToInventory, catalogItem, totalSpent, allReady, TEAM_BUDGET } from './lobby.js';
+import { applyCartToInventory, catalogItem, cartCost, allReady, PLAYER_BUDGET } from './lobby.js';
 import { LobbyUI } from './lobbyui.js';
+
+const START_DELAY_MS = 3000;
 
 // Multiplayer Bunker — full single-player feature set ported into a netplayjs Game.
 //
@@ -110,6 +112,7 @@ class BunkerMPGame extends netplayjs.Game {
     this.gameState = 'LOBBY';    // LOBBY | PLAYING
     this.lobbyCarts = {};        // playerID → { catalogId: count }
     this.lobbyReady = {};        // playerID → bool
+    this.lobbyStartCountdown = 0; // ms remaining once everyone is ready (cancellable)
     for (const p of players) {
       this.lobbyCarts[p.getID()] = {};
       this.lobbyReady[p.getID()] = false;
@@ -168,6 +171,7 @@ class BunkerMPGame extends netplayjs.Game {
   }
 
   _dispatchVirtualKey(type, key) {
+    if (key.startsWith('lobby:')) console.info('[lobby] dispatch', type, key);
     const { code, keyCode } = virtualKeyCodeFor(key);
     const evt = new KeyboardEvent(type, {
       key,
@@ -270,16 +274,18 @@ class BunkerMPGame extends netplayjs.Game {
       carts: this.lobbyCarts,
       ready: this.lobbyReady,
       players: labels,
+      starting: this.lobbyStartCountdown > 0 ? this.lobbyStartCountdown / 1000 : 0,
     });
   }
 
   _lobbyBuy(playerID, catalogId) {
     const item = catalogItem(catalogId);
     if (!item) return;
-    if (totalSpent(this.lobbyCarts) + item.price > TEAM_BUDGET) return;
-    if (!this.lobbyCarts[playerID]) this.lobbyCarts[playerID] = {};
-    this.lobbyCarts[playerID][catalogId] = (this.lobbyCarts[playerID][catalogId] || 0) + 1;
+    const cart = this.lobbyCarts[playerID] || (this.lobbyCarts[playerID] = {});
+    if (cartCost(cart) + item.price > PLAYER_BUDGET) return;
+    cart[catalogId] = (cart[catalogId] || 0) + 1;
     this.lobbyReady[playerID] = false; // edits invalidate ready
+    this.lobbyStartCountdown = 0;
   }
 
   _lobbyUnbuy(playerID, catalogId) {
@@ -288,6 +294,7 @@ class BunkerMPGame extends netplayjs.Game {
     cart[catalogId]--;
     if (cart[catalogId] <= 0) delete cart[catalogId];
     this.lobbyReady[playerID] = false;
+    this.lobbyStartCountdown = 0;
   }
 
   _startGame() {
@@ -297,10 +304,11 @@ class BunkerMPGame extends netplayjs.Game {
     }
     this.gameState = 'PLAYING';
     this.lobbyUI.hide();
-    // First click after lobby will lock the pointer for the local player.
+    console.info('[lobby] game starting with carts', this.lobbyCarts);
   }
 
   tickLobby(playerInputs) {
+    const DT_MS = BunkerMPGame.timestep;
     let changed = false;
     for (const [player, input] of playerInputs) {
       const id = player.getID();
@@ -311,14 +319,31 @@ class BunkerMPGame extends netplayjs.Game {
         else if (unbuyMatch) { this._lobbyUnbuy(id, unbuyMatch[1]); changed = true; }
         else if (k === 'lobby:ready') {
           this.lobbyReady[id] = !this.lobbyReady[id];
+          this.lobbyStartCountdown = 0;
           changed = true;
+          console.info('[lobby] ready toggled for player', id, '→', this.lobbyReady[id]);
         }
       }
     }
-    if (changed) this._refreshLobbyUI();
 
+    // Run / cancel the start countdown based on collective ready state.
     const ids = Array.from(this.mp.keys());
-    if (allReady(ids, this.lobbyReady)) this._startGame();
+    const ready = allReady(ids, this.lobbyReady);
+    if (ready) {
+      if (this.lobbyStartCountdown <= 0) {
+        this.lobbyStartCountdown = START_DELAY_MS;
+        changed = true;
+      } else {
+        this.lobbyStartCountdown -= DT_MS;
+        if (this.lobbyStartCountdown <= 0) { this._startGame(); return; }
+        changed = true; // refresh countdown text
+      }
+    } else if (this.lobbyStartCountdown > 0) {
+      this.lobbyStartCountdown = 0;
+      changed = true;
+    }
+
+    if (changed) this._refreshLobbyUI();
   }
 
   tick(playerInputs) {
@@ -492,6 +517,7 @@ class BunkerMPGame extends netplayjs.Game {
       gameState: this.gameState,
       lobbyCarts: this.lobbyCarts,
       lobbyReady: this.lobbyReady,
+      lobbyStartCountdown: this.lobbyStartCountdown,
       timer: this.timer,
       bombPhase: this.bombPhase, bombT: this.bombT, epicenter: this.epicenter,
       players, edits,
@@ -503,6 +529,9 @@ class BunkerMPGame extends netplayjs.Game {
     this.gameState = state.gameState ?? this.gameState;
     if (state.lobbyCarts) this.lobbyCarts = state.lobbyCarts;
     if (state.lobbyReady) this.lobbyReady = state.lobbyReady;
+    if (typeof state.lobbyStartCountdown === 'number') {
+      this.lobbyStartCountdown = state.lobbyStartCountdown;
+    }
     this.timer = state.timer;
     this.bombPhase = state.bombPhase;
     this.bombT = state.bombT;

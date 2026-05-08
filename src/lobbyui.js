@@ -1,4 +1,4 @@
-import { LOBBY_CATALOG, TEAM_BUDGET, catalogItem, totalSpent } from './lobby.js';
+import { LOBBY_CATALOG, PLAYER_BUDGET, catalogItem, cartCost } from './lobby.js';
 import { ITEM_DEFS } from './items.js';
 
 // Builds and updates the pre-game lobby overlay. UI events (catalog +/-, ready)
@@ -129,11 +129,11 @@ export class LobbyUI {
     root.innerHTML = `
       <div class="window">
         <h1>SUPPLY DEPOT</h1>
-        <div class="subtitle">Pick equipment from the shared budget. The bomb drops when everyone is ready.</div>
+        <div class="subtitle">Pick your kit. Each survivor has $${PLAYER_BUDGET} to spend. Game starts when everyone is ready.</div>
         <div class="budget">
           <span>SPENT</span>
           <span class="spent">0</span>
-          <span>/ ${TEAM_BUDGET}</span>
+          <span>/ ${PLAYER_BUDGET}</span>
           <span class="remaining">— remaining</span>
         </div>
         <div class="grid">
@@ -160,7 +160,15 @@ export class LobbyUI {
     this.cartsEl = root.querySelector('.carts');
     this.statusEl = root.querySelector('.status');
     this.readyBtn = root.querySelector('.ready-btn');
-    this.readyBtn.addEventListener('click', () => this.onAction('lobby:ready'));
+    this.readyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.info('[lobby] READY button clicked');
+      this.onAction('lobby:ready');
+    });
+    // Eat clicks on the lobby root so the canvas mousedown handler (which would
+    // try to grab pointer-lock) never fires while a lobby UI is interactive.
+    root.addEventListener('mousedown', (e) => e.stopPropagation(), true);
+    root.addEventListener('click',     (e) => e.stopPropagation(), true);
     this._buildCatalog();
   }
 
@@ -181,10 +189,12 @@ export class LobbyUI {
         <div class="count">0</div>
         <button data-action="buy" data-id="${item.id}">+</button>
       `;
-      row.querySelector('[data-action="buy"]').addEventListener('click', () => {
+      row.querySelector('[data-action="buy"]').addEventListener('click', (e) => {
+        e.stopPropagation();
         this.onAction(`lobby:buy:${item.id}`);
       });
-      row.querySelector('[data-action="unbuy"]').addEventListener('click', () => {
+      row.querySelector('[data-action="unbuy"]').addEventListener('click', (e) => {
+        e.stopPropagation();
         this.onAction(`lobby:unbuy:${item.id}`);
       });
       this.catalogEl.appendChild(row);
@@ -195,31 +205,32 @@ export class LobbyUI {
   show() { this.root.classList.add('open'); }
   hide() { this.root.classList.remove('open'); }
 
-  // state: { carts: {pid: {cid: count}}, ready: {pid: bool}, players: [{id, label}] }
+  // state: { carts: {pid: {cid: count}}, ready: {pid: bool}, players: [{id, label}], starting?: number }
   update(state) {
-    const spent = totalSpent(state.carts);
-    const remaining = TEAM_BUDGET - spent;
-    this.spentEl.textContent = String(spent);
-    this.remainingEl.textContent = `${remaining} remaining`;
-    this.budgetEl.classList.toggle('over', spent > TEAM_BUDGET);
-
-    // Local player's cart determines which "+" buttons stay enabled.
     const localCart = state.carts[this.localPlayerID] || {};
+    const localSpent = cartCost(localCart);
+    const remaining = PLAYER_BUDGET - localSpent;
+    this.spentEl.textContent = String(localSpent);
+    this.remainingEl.textContent = `${remaining} remaining`;
+    this.budgetEl.classList.toggle('over', localSpent > PLAYER_BUDGET);
+
+    // Catalog +/- gates against the local player's own budget.
     for (const [id, row] of this.catalogRows) {
       const localCount = localCart[id] || 0;
       const item = catalogItem(id);
-      const wouldOverspend = (spent + item.price) > TEAM_BUDGET;
+      const wouldOverspend = (localSpent + item.price) > PLAYER_BUDGET;
       row.querySelector('.count').textContent = String(localCount);
       row.querySelector('[data-action="buy"]').disabled = wouldOverspend;
       row.querySelector('[data-action="unbuy"]').disabled = localCount <= 0;
     }
 
-    // Per-player carts — local player highlighted, ready pills shown.
+    // Per-player carts — local player highlighted, ready pills + per-player spend shown.
     this.cartsEl.replaceChildren();
     for (const p of state.players) {
       const cart = state.carts[p.id] || {};
       const isLocal = p.id === this.localPlayerID;
       const isReady = !!state.ready[p.id];
+      const spent = cartCost(cart);
       const cartEl = document.createElement('div');
       cartEl.className = `cart${isLocal ? ' local' : ''}`;
       const lines = Object.entries(cart);
@@ -231,7 +242,7 @@ export class LobbyUI {
         : '<div class="line empty">(empty)</div>';
       cartEl.innerHTML = `
         <div class="who">
-          <span>${p.label}${isLocal ? ' (you)' : ''}</span>
+          <span>${p.label}${isLocal ? ' (you)' : ''} &middot; <span style="color:#aaa;">$${spent}/${PLAYER_BUDGET}</span></span>
           <span class="ready-pill${isReady ? ' on' : ''}">${isReady ? 'READY' : 'choosing…'}</span>
         </div>
         <div class="lines">${linesHtml}</div>
@@ -245,8 +256,14 @@ export class LobbyUI {
     this.readyBtn.textContent = localReady ? 'UN-READY' : 'READY';
     const total = state.players.length;
     const ready = state.players.filter(p => state.ready[p.id]).length;
-    this.statusEl.textContent = ready === total
-      ? 'All ready — entering bunker site…'
-      : `${ready} / ${total} ready`;
+    if (typeof state.starting === 'number' && state.starting > 0) {
+      this.statusEl.textContent = `Starting in ${state.starting.toFixed(1)}s — un-ready to cancel`;
+      this.statusEl.style.color = '#ffd9a3';
+    } else {
+      this.statusEl.textContent = ready === total
+        ? 'All ready — preparing bunker site…'
+        : `${ready} / ${total} ready`;
+      this.statusEl.style.color = '';
+    }
   }
 }

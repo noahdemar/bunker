@@ -1,13 +1,13 @@
 // Lobby supply catalog + cart helpers.
 //
-// The team shares a single budget. Each player has their own cart inside the shared
-// budget — anyone can buy, but the items go to the buyer. When everyone marks ready
-// the carts are converted into per-player inventories and the game starts.
+// Each player gets their own per-player budget — they spend only from their own
+// pool, no contention with teammates. When everyone marks ready the carts are
+// converted into per-player inventories and the game starts.
 //
 // Tools (pickaxe / shovel / axe) are not in the catalog: they're given to every
 // player automatically so nobody can lock themselves out of mining.
 
-export const TEAM_BUDGET = 200;
+export const PLAYER_BUDGET = 100;
 
 // `give` is itemId → count. price is in budget units.
 export const LOBBY_CATALOG = [
@@ -29,13 +29,12 @@ const ITEM_BY_ID = Object.fromEntries(LOBBY_CATALOG.map(c => [c.id, c]));
 
 export function catalogItem(id) { return ITEM_BY_ID[id]; }
 
-export function totalSpent(carts) {
+// Sum of one player's cart.
+export function cartCost(cart) {
   let total = 0;
-  for (const cart of Object.values(carts)) {
-    for (const [id, count] of Object.entries(cart)) {
-      const item = ITEM_BY_ID[id];
-      if (item) total += item.price * count;
-    }
+  for (const [id, count] of Object.entries(cart || {})) {
+    const item = ITEM_BY_ID[id];
+    if (item) total += item.price * count;
   }
   return total;
 }
