@@ -251,6 +251,48 @@ function generatorTopTex() {
   return texFromCanvas(c);
 }
 
+function buttressSideTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // wood pole in the central 20% strip
+  const x0 = SIZE * 0.40, w = SIZE * 0.20;
+  ctx.fillStyle = '#62421e';
+  ctx.fillRect(x0, 0, w, SIZE);
+  // grain
+  for (let i = 0; i < 14; i++) {
+    ctx.fillStyle = `rgba(60,40,22,${0.25 + Math.random() * 0.4})`;
+    ctx.fillRect(x0, Math.random() * SIZE, w, 1 + Math.random() * 2);
+  }
+  // metal banding (reinforcement) at top, middle, and bottom
+  ctx.fillStyle = '#404040';
+  for (const yy of [SIZE * 0.05, SIZE * 0.50, SIZE * 0.92]) {
+    ctx.fillRect(x0 - 2, yy, w + 4, 3);
+  }
+  // highlight
+  ctx.fillStyle = 'rgba(255,235,200,0.18)';
+  ctx.fillRect(x0 + 2, 0, 2, SIZE);
+  return texFromCanvas(c);
+}
+function buttressTopTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // round end-grain
+  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.18;
+  ctx.fillStyle = '#7a4f1c';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  // rings
+  ctx.strokeStyle = 'rgba(40,28,12,0.6)';
+  ctx.lineWidth = 1;
+  for (let rr = 3; rr < r; rr += 3) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  return texFromCanvas(c);
+}
+
 function bedSideTex() {
   // Wood frame, low profile
   const [c, ctx] = makeCanvas();
@@ -284,36 +326,42 @@ function bedTopTex() {
 
 function torchSideTex() {
   const [c, ctx] = makeCanvas();
-  // dark
-  ctx.fillStyle = '#1a1208';
+  // warm fiery base across the whole face
+  ctx.fillStyle = '#a83410';
   ctx.fillRect(0, 0, SIZE, SIZE);
-  // wooden stick (bottom 65%)
-  ctx.fillStyle = '#62421e';
-  ctx.fillRect(SIZE * 0.40, SIZE * 0.30, SIZE * 0.20, SIZE * 0.55);
-  // flame core (top)
-  const fx = SIZE * 0.5, fy = SIZE * 0.22;
-  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.32);
-  grad.addColorStop(0, '#fff4b8');
-  grad.addColorStop(0.4, '#ffaa44');
-  grad.addColorStop(0.8, '#aa3000');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  speckle(ctx, [184, 80, 28], 28);
+  // central plume — bright yellow → orange → red
+  const fx = SIZE * 0.5, fy = SIZE * 0.45;
+  const grad = ctx.createRadialGradient(fx, fy * 0.7, 1, fx, fy, SIZE * 0.55);
+  grad.addColorStop(0,    '#fffce0');
+  grad.addColorStop(0.25, '#ffe080');
+  grad.addColorStop(0.55, '#ff8a30');
+  grad.addColorStop(1,    'rgba(120,30,0,0)');
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, SIZE, SIZE * 0.55);
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  // flicker streaks
+  ctx.fillStyle = 'rgba(255,220,140,0.45)';
+  for (let i = 0; i < 6; i++) {
+    const tx = SIZE * 0.30 + Math.random() * SIZE * 0.40;
+    const ty = SIZE * 0.10 + Math.random() * SIZE * 0.30;
+    ctx.fillRect(tx, ty, 2, 4 + Math.random() * 6);
+  }
+  bevel(ctx, 0.16);
   return texFromCanvas(c);
 }
 function torchEmissiveTex() {
   const [c, ctx] = makeCanvas();
-  ctx.fillStyle = '#000';
+  // fully-on emissive across the whole face, peaking in the center
+  const fx = SIZE * 0.5, fy = SIZE * 0.5;
+  ctx.fillStyle = '#603018';
   ctx.fillRect(0, 0, SIZE, SIZE);
-  // emissive only the flame
-  const fx = SIZE * 0.5, fy = SIZE * 0.22;
-  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.32);
-  grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.4, '#ffcc66');
-  grad.addColorStop(0.8, '#552200');
-  grad.addColorStop(1, '#000');
+  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.7);
+  grad.addColorStop(0,    '#ffffff');
+  grad.addColorStop(0.35, '#ffd680');
+  grad.addColorStop(0.75, '#a04018');
+  grad.addColorStop(1,    '#301008');
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, SIZE, SIZE * 0.55);
+  ctx.fillRect(0, 0, SIZE, SIZE);
   return texFromCanvas(c);
 }
 function concreteTex() {
@@ -346,9 +394,9 @@ export function makeBlockMaterials() {
   const torchSide = new THREE.MeshStandardMaterial({
     map: torchSideTex(),
     emissiveMap: torchEmissiveTex(),
-    emissive: 0xffaa44,
-    emissiveIntensity: 1.4,
-    roughness: 0.8,
+    emissive: 0xffcc70,
+    emissiveIntensity: 2.4,
+    roughness: 0.6,
   });
 
   // Helper: faces array [+x, -x, +y, -y, +z, -z]
@@ -384,6 +432,15 @@ export function makeBlockMaterials() {
   const bedSide = new THREE.MeshStandardMaterial({ map: bedSideTex(), roughness: 0.9 });
   const bedTop  = new THREE.MeshStandardMaterial({ map: bedTopTex(),  roughness: 0.95 });
   materials[BLOCKS.BED] = split(bedSide, bedTop, bedSide);
+
+  // Buttress — alphaTest reveals only the central pole; surrounding cell edges are transparent.
+  const buttressSide = new THREE.MeshStandardMaterial({
+    map: buttressSideTex(), transparent: true, alphaTest: 0.5, roughness: 0.85, side: THREE.DoubleSide,
+  });
+  const buttressTop = new THREE.MeshStandardMaterial({
+    map: buttressTopTex(), transparent: true, alphaTest: 0.5, roughness: 0.85, side: THREE.DoubleSide,
+  });
+  materials[BLOCKS.BUTTRESS] = split(buttressSide, buttressTop, buttressTop);
 
   return materials;
 }

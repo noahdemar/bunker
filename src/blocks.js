@@ -13,11 +13,12 @@ export const BLOCKS = {
   FOOD_LOCKER: 10,
   GENERATOR:   11,
   BED:         12,
+  BUTTRESS:    13,
 };
 
 export const BLOCK_NAMES = [
   'air', 'grass', 'dirt', 'stone', 'sand', 'wood', 'leaves', 'concrete',
-  'torch', 'water_tank', 'food_locker', 'generator', 'bed',
+  'torch', 'water_tank', 'food_locker', 'generator', 'bed', 'buttress',
 ];
 
 // Set of device blocks (placeable survival equipment).

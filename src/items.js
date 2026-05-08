@@ -8,14 +8,15 @@ export const ITEM_DEFS = {
   shovel:  { name: 'Shovel',  stack: 1, tool: 'shovel', label: 'SHV' },
   axe:     { name: 'Axe',     stack: 1, tool: 'axe',    label: 'AXE' },
 
-  concrete: { name: 'Concrete', stack: 64, blockId: BLOCKS.CONCRETE, label: 'CON', color: '#7a766f' },
-  stone:    { name: 'Stone',    stack: 64, blockId: BLOCKS.STONE,    label: 'STN', color: '#808082' },
-  wood:     { name: 'Wood',     stack: 64, blockId: BLOCKS.WOOD,     label: 'WD',  color: '#624628' },
-  dirt:     { name: 'Dirt',     stack: 64, blockId: BLOCKS.DIRT,     label: 'DRT', color: '#735237' },
-  grass:    { name: 'Grass',    stack: 64, blockId: BLOCKS.GRASS,    label: 'GRS', color: '#5a8240' },
-  sand:     { name: 'Sand',     stack: 64, blockId: BLOCKS.SAND,     label: 'SND', color: '#dcc896' },
-  leaves:   { name: 'Leaves',   stack: 64, blockId: BLOCKS.LEAVES,   label: 'LF',  color: '#466632' },
-  torch:    { name: 'Torch',    stack: 16, blockId: BLOCKS.TORCH,    label: 'TCH', color: '#ffaa44' },
+  concrete: { name: 'Concrete', stack: 20, blockId: BLOCKS.CONCRETE, label: 'CON', color: '#7a766f' },
+  stone:    { name: 'Stone',    stack: 20, blockId: BLOCKS.STONE,    label: 'STN', color: '#808082' },
+  wood:     { name: 'Wood',     stack: 20, blockId: BLOCKS.WOOD,     label: 'WD',  color: '#624628' },
+  dirt:     { name: 'Dirt',     stack: 20, blockId: BLOCKS.DIRT,     label: 'DRT', color: '#735237' },
+  grass:    { name: 'Grass',    stack: 20, blockId: BLOCKS.GRASS,    label: 'GRS', color: '#5a8240' },
+  sand:     { name: 'Sand',     stack: 20, blockId: BLOCKS.SAND,     label: 'SND', color: '#dcc896' },
+  leaves:   { name: 'Leaves',   stack: 20, blockId: BLOCKS.LEAVES,   label: 'LF',  color: '#466632' },
+  torch:    { name: 'Torch',    stack: 20, blockId: BLOCKS.TORCH,    label: 'TCH', color: '#ffaa44' },
+  buttress: { name: 'Buttress', stack: 20, blockId: BLOCKS.BUTTRESS, label: 'BUT', color: '#62421e' },
 
   water_tank:  { name: 'Water Tank',  stack: 4, blockId: BLOCKS.WATER_TANK,  label: 'TNK', color: '#3070a0' },
   food_locker: { name: 'Food Locker', stack: 4, blockId: BLOCKS.FOOD_LOCKER, label: 'FOD', color: '#604032' },
@@ -44,6 +45,7 @@ export const BLOCK_HARDNESS = {
   [BLOCKS.FOOD_LOCKER]: 3.0,
   [BLOCKS.GENERATOR]:   4.0,
   [BLOCKS.BED]:         1.5,
+  [BLOCKS.BUTTRESS]:    1.5,
 };
 
 // Which tool is "right" for each block.
@@ -61,13 +63,17 @@ export const BLOCK_PREFERRED_TOOL = {
   [BLOCKS.FOOD_LOCKER]: 'pick',
   [BLOCKS.GENERATOR]:   'pick',
   [BLOCKS.BED]:         'axe',
+  [BLOCKS.BUTTRESS]:    'axe',
 };
+
+// Right-tool multipliers — pickaxe is 3x faster than the other tools' right-tool bonus.
+const RIGHT_TOOL_MULT = { pick: 0.4 / 3, shovel: 0.4, axe: 0.4 };
 
 // Effective time for (block, tool). Tool is one of 'pick'|'shovel'|'axe'|null (hands).
 export function miningTime(blockId, tool) {
   const base = BLOCK_HARDNESS[blockId] ?? 1.0;
   if (!tool)                                    return base * 4.0;   // hands
-  if (tool === BLOCK_PREFERRED_TOOL[blockId])   return base * 0.4;   // right tool
+  if (tool === BLOCK_PREFERRED_TOOL[blockId])   return base * (RIGHT_TOOL_MULT[tool] ?? 0.4);
   return base * 1.5;                                                 // wrong tool
 }
 

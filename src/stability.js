@@ -27,7 +27,14 @@ const MAT_COST = {
   [BLOCKS.FOOD_LOCKER]: 1,
   [BLOCKS.GENERATOR]:   1,
   [BLOCKS.BED]:         2,
+  [BLOCKS.BUTTRESS]:    1,
 };
+
+// A buttress acts as an "anchor umbrella" — every solid cell in the 6×6 horizontal
+// area directly above it (3 levels up) is treated as anchored at cantilever 0.
+const UMBRELLA_DX = [-3, -2, -1, 0, 1, 2];
+const UMBRELLA_DZ = [-3, -2, -1, 0, 1, 2];
+const UMBRELLA_DY = [1, 2, 3];
 
 const BEDROCK_Y = -5;
 export const MAX_CANTILEVER = 4;
@@ -82,6 +89,26 @@ function findUnstable(world, cx, cy, cz) {
         const k = `${x},${y},${z}`;
         if (!cant.has(k)) { cant.set(k, 0); pqInsert(pq, 0, x, y, z); }
       }
+    }
+  }
+
+  // Buttress umbrellas: every solid cell in the 6×6×3 region above each buttress
+  // becomes a cantilever-0 anchor. The buttress itself still needs to be reached by
+  // BFS from bedrock to be "anchored" — an unsupported buttress falls and the
+  // umbrella vanishes on the next stability cascade.
+  for (let x = x0; x <= x1; x++)
+  for (let y = y0; y <= y1; y++)
+  for (let z = z0; z <= z1; z++) {
+    if (world.terrain.blockAt(x, y, z) !== BLOCKS.BUTTRESS) continue;
+    for (const dx of UMBRELLA_DX)
+    for (const dz of UMBRELLA_DZ)
+    for (const dy of UMBRELLA_DY) {
+      const ux = x + dx, uy = y + dy, uz = z + dz;
+      if (ux < x0 || ux > x1 || uy < y0 || uy > y1 || uz < z0 || uz > z1) continue;
+      const id = world.terrain.blockAt(ux, uy, uz);
+      if (id === BLOCKS.AIR || id === BLOCKS.LEAVES || id === BLOCKS.TORCH || id === BLOCKS.BUTTRESS) continue;
+      const k = `${ux},${uy},${uz}`;
+      if (!cant.has(k)) { cant.set(k, 0); pqInsert(pq, 0, ux, uy, uz); }
     }
   }
 

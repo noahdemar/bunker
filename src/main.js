@@ -46,12 +46,13 @@ const hud = new HUD(30 * 60);
 const bomb = new BombSequence(scene, camera, world, atmosphere);
 
 // --- inventory + tools ---
-const inventory = new Inventory(10);
+const inventory = new Inventory(12);
 inventory.add('pickaxe', 1);
 inventory.add('shovel', 1);
 inventory.add('axe', 1);
-inventory.add('concrete', 32);
-inventory.add('wood', 16);
+inventory.add('concrete', 16);
+inventory.add('wood', 12);
+inventory.add('buttress', 6);
 inventory.add('torch', 8);
 inventory.add('water_tank', 1);
 inventory.add('food_locker', 1);
@@ -184,6 +185,13 @@ function tickMining(dt) {
     return;
   }
   const tool = inventory.activeTool();
+  // Inventory-full gate: don't even start mining if we can't accept the drop.
+  const wouldDrop = dropFor(r.hit.id);
+  if (wouldDrop && !inventory.canAdd(wouldDrop, 1)) {
+    if (mining.isActive()) { mining.cancel(); setMiningProgress(0); }
+    hotbar.showToast('INVENTORY FULL');
+    return;
+  }
   if (!mining.matches(r.hit.x, r.hit.y, r.hit.z, r.hit.id, tool)) {
     mining.start(r.hit.x, r.hit.y, r.hit.z, r.hit.id, tool);
   }
@@ -191,10 +199,7 @@ function tickMining(dt) {
     const drop = dropFor(r.hit.id);
     const mx = r.hit.x, my = r.hit.y, mz = r.hit.z;
     world.setBlock(mx, my, mz, BLOCKS.AIR);
-    if (drop) {
-      const added = inventory.add(drop, 1);
-      if (added === 0) hotbar.showToast('INVENTORY FULL');
-    }
+    if (drop) inventory.add(drop, 1);
     mining.cancel();
     setMiningProgress(0);
     // Stability: pulled material may de-anchor neighbors; cave-in blocks fall as entities.
