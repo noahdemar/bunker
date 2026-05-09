@@ -195,12 +195,20 @@ export class MPPlayer {
     return null;
   }
 
-  // Toggle the door under the crosshair (T). Returns truthy if a door flipped.
-  applyToggleDoor(input, world) {
-    if (!input.keysPressed?.['t']) return null;
+  // E-key interaction: toggle the door/vault under the crosshair, or "rest"
+  // (heal + partial refill) when looking at a bed.
+  applyInteract(input, world) {
+    if (!input.keysPressed?.['interact']) return null;
     const r = this.raycast(world);
     if (!r) return null;
-    if (!isDoorBlock(world.terrain.blockAt(r.hit.x, r.hit.y, r.hit.z))) return null;
+    const id = world.terrain.blockAt(r.hit.x, r.hit.y, r.hit.z);
+    if (!isDoorBlock(id)) return null;
+    if (id === BLOCKS.BED) {
+      this.survival.health = Math.min(100, this.survival.health + 25);
+      this.survival.water  = Math.min(100, this.survival.water  + 15);
+      this.survival.food   = Math.min(100, this.survival.food   + 15);
+      return { x: r.hit.x, y: r.hit.y, z: r.hit.z, rested: true };
+    }
     if (tryToggleDoor(world, r.hit.x, r.hit.y, r.hit.z)) {
       return { x: r.hit.x, y: r.hit.y, z: r.hit.z, toggled: true };
     }

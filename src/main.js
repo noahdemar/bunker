@@ -133,6 +133,22 @@ addEventListener('keydown', (e) => {
     if (hud.gameOver) return;
     if (!hotbar.isInventoryOpen() && !overlay.classList.contains('hidden')) return;
     e.preventDefault();
+    // Interact takes priority over the inventory toggle: looking at a door or
+    // vault opens/closes it; looking at a bed rests (small heal + refill).
+    if (!hotbar.isInventoryOpen() && locked) {
+      const r = currentRaycast();
+      const id = r ? world.terrain.blockAt(r.hit.x, r.hit.y, r.hit.z) : 0;
+      if (id === BLOCKS.BED) {
+        survival.health = Math.min(100, survival.health + 25);
+        survival.water  = Math.min(100, survival.water  + 15);
+        survival.food   = Math.min(100, survival.food   + 15);
+        return;
+      }
+      if (isDoorBlock(id)) {
+        tryToggleDoor(world, r.hit.x, r.hit.y, r.hit.z);
+        return;
+      }
+    }
     const open = hotbar.toggleInventory();
     clearGameplayInput();
     if (open) {
@@ -143,14 +159,6 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (hotbar.isInventoryOpen()) return;
-  // Toggle door under crosshair.
-  if (e.code === 'KeyT' && locked) {
-    const r = currentRaycast();
-    if (r && isDoorBlock(world.terrain.blockAt(r.hit.x, r.hit.y, r.hit.z))) {
-      tryToggleDoor(world, r.hit.x, r.hit.y, r.hit.z);
-      return;
-    }
-  }
   switch (e.code) {
     case 'KeyW': input.W = true; break;
     case 'KeyA': input.A = true; break;

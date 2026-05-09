@@ -343,69 +343,6 @@ function vaultOpenTex() {
   return texFromCanvas(c);
 }
 
-function wireGlyphTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.08;
-  ctx.fillStyle = '#c88848';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  return texFromCanvas(c);
-}
-function wireBottomTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.06;
-  ctx.fillStyle = '#c88848';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  return texFromCanvas(c);
-}
-
-function buttressSideTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  // wood pole in the central 20% strip
-  const x0 = SIZE * 0.40, w = SIZE * 0.20;
-  ctx.fillStyle = '#62421e';
-  ctx.fillRect(x0, 0, w, SIZE);
-  // grain
-  for (let i = 0; i < 14; i++) {
-    ctx.fillStyle = `rgba(60,40,22,${0.25 + Math.random() * 0.4})`;
-    ctx.fillRect(x0, Math.random() * SIZE, w, 1 + Math.random() * 2);
-  }
-  // metal banding (reinforcement) at top, middle, and bottom
-  ctx.fillStyle = '#404040';
-  for (const yy of [SIZE * 0.05, SIZE * 0.50, SIZE * 0.92]) {
-    ctx.fillRect(x0 - 2, yy, w + 4, 3);
-  }
-  // highlight
-  ctx.fillStyle = 'rgba(255,235,200,0.18)';
-  ctx.fillRect(x0 + 2, 0, 2, SIZE);
-  return texFromCanvas(c);
-}
-function buttressTopTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  // round end-grain
-  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.18;
-  ctx.fillStyle = '#7a4f1c';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  // rings
-  ctx.strokeStyle = 'rgba(40,28,12,0.6)';
-  ctx.lineWidth = 1;
-  for (let rr = 3; rr < r; rr += 3) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  return texFromCanvas(c);
-}
-
 function bedSideTex() {
   // Wood frame, low profile
   const [c, ctx] = makeCanvas();
@@ -438,60 +375,6 @@ function bedTopTex() {
 }
 
 
-function torchGlyphTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  // centered stick + flame core; looks okay from all angles
-  const x0 = SIZE * 0.42, w = SIZE * 0.16;
-  ctx.fillStyle = '#62421e';
-  ctx.fillRect(x0, SIZE * 0.45, w, SIZE * 0.45);
-  const cx = SIZE / 2, cy = SIZE / 2;
-  const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, SIZE * 0.18);
-  grad.addColorStop(0,    '#fffceb');
-  grad.addColorStop(0.7,  '#ffe080');
-  grad.addColorStop(1,    'rgba(255,160,40,0)');
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(cx, cy, SIZE * 0.18, 0, Math.PI * 2); ctx.fill();
-  return texFromCanvas(c);
-}
-function torchTopTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  // centered flame core for the top view
-  const cx = SIZE / 2, cy = SIZE / 2;
-  const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, SIZE * 0.16);
-  grad.addColorStop(0,    '#fffceb');
-  grad.addColorStop(0.7,  '#ffe080');
-  grad.addColorStop(1,    'rgba(255,160,40,0)');
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(cx, cy, SIZE * 0.16, 0, Math.PI * 2);
-  ctx.fill();
-  return texFromCanvas(c);
-}
-function torchEmissiveTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  // emissive only where the flame is — keeps stick non-glowing
-  const fx = SIZE * 0.5, fy = SIZE * 0.22;
-  const grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.22);
-  grad.addColorStop(0,    '#ffffff');
-  grad.addColorStop(0.4,  '#ffd870');
-  grad.addColorStop(0.9,  '#552200');
-  grad.addColorStop(1,    'rgba(0,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(SIZE * 0.22, 0, SIZE * 0.56, SIZE * 0.45);
-  return texFromCanvas(c);
-}
-function torchBottomTex() {
-  const [c, ctx] = makeCanvas();
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  // centered wood stick cross-section for the bottom view
-  const x0 = SIZE * 0.42, w = SIZE * 0.16;
-  ctx.fillStyle = '#62421e';
-  ctx.fillRect(x0, x0, w, w);
-  return texFromCanvas(c);
-}
 function concreteTex() {
   const [c, ctx] = makeCanvas();
   speckle(ctx, [122, 118, 110], 30);
@@ -504,6 +387,25 @@ function concreteTex() {
   }
   bevel(ctx, 0.28);
   return texFromCanvas(c);
+}
+
+// Per-block-type geometry. Most blocks are full 1x1x1 cubes; torches, buttresses,
+// and wire are slim glyph shapes that occupy only the center of their cell so
+// neighbours don't overlap or z-fight with their faces. The geometry is
+// translated upward so its bottom rests on the cell floor (y=0 in cell-local
+// space) rather than the cell center — without that the torch would float.
+export function makeBlockGeometries() {
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const stick = new THREE.BoxGeometry(0.18, 0.7, 0.18);
+  stick.translate(0, -0.15, 0); // sit on the floor of the cell
+  const column = new THREE.BoxGeometry(0.35, 1.0, 0.35);
+  const strand = new THREE.BoxGeometry(0.10, 1.0, 0.10);
+  return {
+    [BLOCKS.TORCH]:    stick,
+    [BLOCKS.BUTTRESS]: column,
+    [BLOCKS.WIRE]:     strand,
+    default: cube,
+  };
 }
 
 // Build per-block 6-face material array. Order: +x, -x, +y, -y, +z, -z (Three's BoxGeometry default).
@@ -519,15 +421,13 @@ export function makeBlockMaterials() {
     map: leavesTex(), roughness: 1.0, transparent: true, alphaTest: 0.3,
   });
   const concrete = new THREE.MeshStandardMaterial({ map: concreteTex(), roughness: 0.95 });
-  const torchMaterial = new THREE.MeshStandardMaterial({
-    map: torchGlyphTex(),
-    emissiveMap: torchGlyphTex(),
-    emissive: 0xffcc70,
-    emissiveIntensity: 2.0,
-    transparent: true,
-    alphaTest: 0.7,
-    depthWrite: true,
-    roughness: 0.6,
+  // Torches/buttresses/wire are now rendered on slim per-type geometry, so the
+  // glyph-on-transparent-cube approach is gone — solid materials suffice.
+  const torchStickMat = new THREE.MeshStandardMaterial({
+    color: 0x62421e, roughness: 0.7,
+  });
+  const torchFlameMat = new THREE.MeshStandardMaterial({
+    color: 0xffd070, emissive: 0xffcc70, emissiveIntensity: 2.0, roughness: 0.5,
   });
 
   // Helper: faces array [+x, -x, +y, -y, +z, -z]
@@ -542,7 +442,10 @@ export function makeBlockMaterials() {
   materials[BLOCKS.WOOD]     = split(woodSide, woodTop, woodTop);
   materials[BLOCKS.LEAVES]   = all(leaves);
   materials[BLOCKS.CONCRETE] = all(concrete);
-  materials[BLOCKS.TORCH]    = all(torchMaterial);
+  // Torch: stick on the sides/bottom, glowing flame cap on top.
+  materials[BLOCKS.TORCH] = [
+    torchStickMat, torchStickMat, torchFlameMat, torchStickMat, torchStickMat, torchStickMat,
+  ];
 
   // Devices.
   const tankSide = new THREE.MeshStandardMaterial({ map: waterTankSideTex(), roughness: 0.7, metalness: 0.25 });
@@ -564,20 +467,14 @@ export function makeBlockMaterials() {
   const bedTop  = new THREE.MeshStandardMaterial({ map: bedTopTex(),  roughness: 0.95 });
   materials[BLOCKS.BED] = split(bedSide, bedTop, bedSide);
 
-  // Buttress — alphaTest reveals only the central pole; surrounding cell edges are transparent.
-  const buttressSide = new THREE.MeshStandardMaterial({
-    map: buttressSideTex(), transparent: true, alphaTest: 0.5, roughness: 0.85, side: THREE.DoubleSide,
-  });
-  const buttressTop = new THREE.MeshStandardMaterial({
-    map: buttressTopTex(), transparent: true, alphaTest: 0.5, roughness: 0.85, side: THREE.DoubleSide,
-  });
+  // Buttress — wood pillar on its own slim geometry; solid materials.
+  const buttressSide = new THREE.MeshStandardMaterial({ color: 0x6a4622, roughness: 0.8 });
+  const buttressTop  = new THREE.MeshStandardMaterial({ color: 0x7a4f1c, roughness: 0.8 });
   materials[BLOCKS.BUTTRESS] = split(buttressSide, buttressTop, buttressTop);
 
-  // Wire — same alphaTest treatment as buttress, but thinner and copper-colored.
+  // Wire — copper strand on its own thin geometry.
   const wireMaterial = new THREE.MeshStandardMaterial({
-    map: wireGlyphTex(), transparent: true, alphaTest: 0.7,
-    depthWrite: true,
-    roughness: 0.4, metalness: 0.6,
+    color: 0xc88848, roughness: 0.4, metalness: 0.6,
   });
   materials[BLOCKS.WIRE] = all(wireMaterial);
 

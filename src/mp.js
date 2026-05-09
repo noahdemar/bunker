@@ -40,13 +40,43 @@ const MP_STABILITY_LIMIT = { maxCells: 10, maxIters: 1 };
 
 const COLORS = [0x4a90d0, 0xd05050, 0x6ac060, 0xd0a040, 0x9050c0, 0xe0a0c0];
 
-function virtualKeyCodeFor(key) {
-  switch (key) {
-    case 'f': return { code: 'KeyF', keyCode: 70 };
-    case 'r': return { code: 'KeyR', keyCode: 82 };
-    default: return { code: key, keyCode: 255 };
-  }
+// netplayjs LockstepNetcode.processLocalInput calls pollInput() twice per frame —
+// the first result is broadcast, the second is queued for local execution. Since
+// DefaultInputReader.getInput() clears keysPressed on every call, the locally
+// queued input arrives empty for press-style keys (jump, hotbar 1-9, R/T/E
+// virtual keys) — only keysHeld survives. Cache the first result for the
+// duration of the synchronous tick so both calls return the same input. Also
+// fold our virtual-key queue (mouse buttons, inventory swap) in here, replacing
+// the lazy override that used to live in _dispatchVirtualKey.
+window.__heldVirtualKeys = window.__heldVirtualKeys ?? new Set();
+window.__pressedVirtualKeys = window.__pressedVirtualKeys ?? [];
+
+const _origGetInput = netplayjs.DefaultInputReader.prototype.getInput;
+let _frameCachedInput = null;
+function _cloneInput(src) {
+  const dst = new netplayjs.DefaultInput();
+  dst.keysPressed = { ...src.keysPressed };
+  dst.keysHeld = { ...src.keysHeld };
+  dst.keysReleased = { ...src.keysReleased };
+  if (src.mousePosition) dst.mousePosition = { ...src.mousePosition };
+  dst.touches = src.touches ? src.touches.map((t) => ({ ...t })) : [];
+  return dst;
 }
+netplayjs.DefaultInputReader.prototype.getInput = function () {
+  if (_frameCachedInput) return _cloneInput(_frameCachedInput);
+  const input = _origGetInput.call(this);
+  for (const k of window.__pressedVirtualKeys) {
+    input.keysPressed[k] = true;
+    input.keysHeld[k] = true;
+  }
+  for (const k of window.__heldVirtualKeys) {
+    input.keysHeld[k] = true;
+  }
+  window.__pressedVirtualKeys = [];
+  _frameCachedInput = input;
+  queueMicrotask(() => { _frameCachedInput = null; });
+  return _cloneInput(input);
+};
 
 class BunkerMPGame extends netplayjs.Game {
   static timestep = 1000 / 60;
@@ -168,22 +198,6 @@ class BunkerMPGame extends netplayjs.Game {
 
   _dispatchVirtualKey(type, key) {
     if (key.startsWith('lobby:')) console.info('[lobby] dispatch', type, key);
-    if (!window.__pressedVirtualKeys) {
-      window.__pressedVirtualKeys = [];
-      window.__heldVirtualKeys = new Set();
-      const orig = netplayjs.DefaultInputReader.prototype.getInput;
-      netplayjs.DefaultInputReader.prototype.getInput = function() {
-        const input = orig.call(this);
-        for (const k of window.__pressedVirtualKeys) {
-          input.keysPressed[k] = true;
-        }
-        for (const k of window.__heldVirtualKeys) {
-          input.keysHeld[k] = true;
-        }
-        window.__pressedVirtualKeys = [];
-        return input;
-      };
-    }
     if (type === 'keydown') {
       window.__pressedVirtualKeys.push(key);
       window.__heldVirtualKeys.add(key);
@@ -225,6 +239,26 @@ class BunkerMPGame extends netplayjs.Game {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
+    // E is overloaded: with the inventory open it always closes it. Otherwise,
+    // if the crosshair is on an interactable (door, vault, bed) we send a
+    // synced 'interact' tick so all peers apply the same state change. Only
+    // when nothing under the crosshair will accept it do we open the inventory.
+    if (!this.hotbar.isInventoryOpen() && this._isMouseInputActive()) {
+      const localPS = this.mp.get(this.localPlayer.getID());
+      const r = localPS?.alive ? localPS.raycast(this.world) : null;
+      const id = r ? this.world.terrain.blockAt(r.hit.x, r.hit.y, r.hit.z) : 0;
+      if (id === BLOCKS.DOOR_CLOSED || id === BLOCKS.DOOR_OPEN
+       || id === BLOCKS.VAULT_CLOSED || id === BLOCKS.VAULT_OPEN) {
+        this._dispatchVirtualKey('keydown', 'interact');
+        this._dispatchVirtualKey('keyup', 'interact');
+        return;
+      }
+      if (id === BLOCKS.BED) {
+        this._dispatchVirtualKey('keydown', 'interact');
+        this._dispatchVirtualKey('keyup', 'interact');
+        return;
+      }
+    }
     const open = this.hotbar.toggleInventory();
     this._clearLocalGameplayInput();
     if (open) {
@@ -377,7 +411,7 @@ class BunkerMPGame extends netplayjs.Game {
         applyStability(this.world, placeEvt.x, placeEvt.y, placeEvt.z, null, MP_STABILITY_LIMIT);
       }
 
-      ps.applyToggleDoor(input, this.world);
+      ps.applyInteract(input, this.world);
 
       if (ps.survival.armed && !ps.survival.dead) {
         ps.survival.update(DT, this.devices, ps.position);

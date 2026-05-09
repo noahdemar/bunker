@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BLOCKS } from './blocks.js';
-import { makeBlockMaterials } from './textures.js';
+import { makeBlockMaterials, makeBlockGeometries } from './textures.js';
 
 // Renders the terrain via per-block-type InstancedMesh.
 // Maintains a sparse "instance" map: world position -> { type, index } for incremental updates.
@@ -11,7 +11,7 @@ export class World {
   constructor(scene, terrain) {
     this.scene = scene;
     this.terrain = terrain;
-    this.geo = new THREE.BoxGeometry(1, 1, 1);
+    this.geos = makeBlockGeometries();
     this.materials = makeBlockMaterials();
     this.meshes = {};        // typeId -> InstancedMesh
     this.indexToKey = {};    // typeId -> array; the inverse of instanceMap for swap-remove
@@ -55,7 +55,8 @@ export class World {
     for (const id of Object.values(BLOCKS)) {
       if (id === BLOCKS.AIR) continue;
       const cap = visible[id].length + PAD;
-      const m = new THREE.InstancedMesh(this.geo, this.materials[id], cap);
+      const geo = this.geos[id] ?? this.geos.default;
+      const m = new THREE.InstancedMesh(geo, this.materials[id], cap);
       m.castShadow = true;
       m.receiveShadow = true;
       m.frustumCulled = false;
