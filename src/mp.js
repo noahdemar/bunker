@@ -341,9 +341,10 @@ class BunkerMPGame extends netplayjs.Game {
       this.prevLobbyKeys[id] = nextKeys;
     }
 
-    // Run / cancel the start countdown based on collective ready state.
+    // Run / cancel the start countdown based on ready state.
     const ids = Array.from(this.mp.keys());
-    const ready = allReady(ids, this.lobbyReady);
+    const localReady = !!this.lobbyReady[this.localPlayer.getID()];
+    const ready = localReady || allReady(ids, this.lobbyReady);
     if (ready) {
       if (this.lobbyStartCountdown <= 0) {
         this.lobbyStartCountdown = START_DELAY_MS;
