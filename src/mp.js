@@ -12,10 +12,9 @@ import { HotbarUI, setMiningProgress } from './hotbar.js';
 import { MetersHUD } from './metershud.js';
 import { MPPlayer } from './mpplayer.js';
 import { BlockOutline } from './blockoutline.js';
-import { applyCartToInventory, catalogItem, cartCost, allReady, PLAYER_BUDGET } from './lobby.js';
+import { applyCartToInventory, catalogItem, cartCost, PLAYER_BUDGET } from './lobby.js';
 import { LobbyUI } from './lobbyui.js';
 
-const START_DELAY_MS = 3000;
 const LOBBY_AUTO_START_MS = 100000;
 
 // Multiplayer Bunker — full single-player feature set ported into a netplayjs Game.
@@ -141,12 +140,7 @@ class BunkerMPGame extends netplayjs.Game {
     this._appliedApocalypse = false;
     this._lastBombPhase = 'NONE';
 
-    // Lobby UI — clicks dispatch virtual keys so the actions ride netplayjs's input
-    // sync (same trick as the inventory-swap path).
-    this.lobbyUI = new LobbyUI(this.localPlayer.getID(), (key) => {
-      this._dispatchVirtualKey('keydown', key);
-      this._dispatchVirtualKey('keyup', key);
-    });
+    this.lobbyUI = new LobbyUI(this.localPlayer.getID(), (action) => this._handleLobbyAction(action));
     if (this.gameState === 'LOBBY') {
       this.lobbyUI.show();
       document.exitPointerLock?.();
@@ -303,6 +297,23 @@ class BunkerMPGame extends netplayjs.Game {
     this.lobbyStartCountdown = 0;
   }
 
+  _handleLobbyAction(action) {
+    const localID = this.localPlayer.getID();
+    const buyMatch = /^lobby:buy:(.+)$/.exec(action);
+    const unbuyMatch = /^lobby:unbuy:(.+)$/.exec(action);
+    if (buyMatch) {
+      this._lobbyBuy(localID, buyMatch[1]);
+      this._refreshLobbyUI();
+    } else if (unbuyMatch) {
+      this._lobbyUnbuy(localID, unbuyMatch[1]);
+      this._refreshLobbyUI();
+    } else if (action === 'lobby:ready') {
+      this.lobbyReady[localID] = true;
+      this._refreshLobbyUI();
+      this._startGame();
+    }
+  }
+
   _startGame() {
     for (const [pid, ps] of this.mp) {
       applyCartToInventory(ps.inventory, this.lobbyCarts[pid] || {});
@@ -316,48 +327,6 @@ class BunkerMPGame extends netplayjs.Game {
   tickLobby(playerInputs) {
     const DT_MS = BunkerMPGame.timestep;
     let changed = false;
-    this.prevLobbyKeys = this.prevLobbyKeys || {};
-
-    for (const [player, input] of playerInputs) {
-      const id = player.getID();
-      const prevKeys = this.prevLobbyKeys[id] || {};
-      const nextKeys = {};
-
-      for (const k of Object.keys(input.keysPressed ?? {})) {
-        nextKeys[k] = true;
-        if (prevKeys[k]) continue; // Ignore if it was pressed last tick
-
-        const buyMatch = /^lobby:buy:(.+)$/.exec(k);
-        const unbuyMatch = /^lobby:unbuy:(.+)$/.exec(k);
-        if (buyMatch)        { this._lobbyBuy(id, buyMatch[1]); changed = true; }
-        else if (unbuyMatch) { this._lobbyUnbuy(id, unbuyMatch[1]); changed = true; }
-        else if (k === 'lobby:ready') {
-          this.lobbyReady[id] = !this.lobbyReady[id];
-          this.lobbyStartCountdown = 0;
-          changed = true;
-          console.info('[lobby] ready toggled for player', id, '→', this.lobbyReady[id]);
-        }
-      }
-      this.prevLobbyKeys[id] = nextKeys;
-    }
-
-    // Run / cancel the start countdown based on ready state.
-    const ids = Array.from(this.mp.keys());
-    const localReady = !!this.lobbyReady[this.localPlayer.getID()];
-    const ready = localReady || allReady(ids, this.lobbyReady);
-    if (ready) {
-      if (this.lobbyStartCountdown <= 0) {
-        this.lobbyStartCountdown = START_DELAY_MS;
-        changed = true;
-      } else {
-        this.lobbyStartCountdown -= DT_MS;
-        if (this.lobbyStartCountdown <= 0) { this._startGame(); return; }
-        changed = true; // refresh countdown text
-      }
-    } else if (this.lobbyStartCountdown > 0) {
-      this.lobbyStartCountdown = 0;
-      changed = true;
-    }
 
     if (this.lobbyMaxTimer > 0) {
       this.lobbyMaxTimer -= DT_MS;

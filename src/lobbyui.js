@@ -1,17 +1,7 @@
 import { LOBBY_CATALOG, PLAYER_BUDGET, catalogItem, cartCost } from './lobby.js';
 import { ITEM_DEFS } from './items.js';
 
-// Builds and updates the pre-game lobby overlay. UI events (catalog +/-, ready)
-// flow back to mp.js as virtual keys so netplayjs can sync them lockstep with
-// game inputs — the click handlers don't mutate state directly.
-//
-//   onAction(virtualKey) — caller dispatches the synthetic key (mp.js's existing
-//   _dispatchVirtualKey path), so peers see the same action in the next tick.
-//
-// Virtual keys we emit:
-//   'lobby:buy:<catalogId>'      — add 1 of catalogId to local player's cart
-//   'lobby:unbuy:<catalogId>'    — remove 1 of catalogId from local player's cart
-//   'lobby:ready'                — toggle local player's ready flag
+// Builds and updates the pre-game lobby overlay.
 let stylesReady = false;
 
 function ensureStyles() {
@@ -129,7 +119,7 @@ export class LobbyUI {
     root.innerHTML = `
       <div class="window">
         <h1>SUPPLY DEPOT</h1>
-        <div class="subtitle">Pick optional extras. Everyone gets a starter kit and the game auto-starts shortly.</div>
+        <div class="subtitle">Buy your own supplies. Everyone has their own $${PLAYER_BUDGET}. Press ready to start immediately.</div>
         <div class="budget">
           <span>SPENT</span>
           <span class="spent">0</span>
@@ -142,7 +132,7 @@ export class LobbyUI {
             <div class="catalog-grid"></div>
           </div>
           <div>
-            <div class="panel-title">LOADOUTS</div>
+            <div class="panel-title">YOUR LOADOUT</div>
             <div class="carts"></div>
           </div>
         </div>
@@ -226,46 +216,35 @@ export class LobbyUI {
       row.querySelector('[data-action="unbuy"]').disabled = localCount <= 0;
     }
 
-    // Per-player carts — local player highlighted, ready pills + per-player spend shown.
+    // Show only the local player's cart so the depot stays local and simple.
     this.cartsEl.replaceChildren();
-    for (const p of state.players) {
-      const cart = state.carts[p.id] || {};
-      const isLocal = p.id === this.localPlayerID;
-      const isReady = !!state.ready[p.id];
-      const spent = cartCost(cart);
-      const cartEl = document.createElement('div');
-      cartEl.className = `cart${isLocal ? ' local' : ''}`;
-      const lines = Object.entries(cart);
-      const linesHtml = lines.length
-        ? lines.map(([cid, n]) => {
-            const item = catalogItem(cid);
-            return `<div class="line"><span>${item.name} ×${n}</span><span>$${item.price * n}</span></div>`;
-          }).join('')
-        : '<div class="line empty">(empty)</div>';
-      cartEl.innerHTML = `
-        <div class="who">
-          <span>${p.label}${isLocal ? ' (you)' : ''} &middot; <span style="color:#aaa;">$${spent}/${PLAYER_BUDGET}</span></span>
-          <span class="ready-pill${isReady ? ' on' : ''}">${isReady ? 'READY' : 'choosing…'}</span>
-        </div>
-        <div class="lines">${linesHtml}</div>
-      `;
-      this.cartsEl.appendChild(cartEl);
-    }
-
-    // Ready button + footer status reflect local player's ready state and overall progress.
+    const localPlayer = state.players.find(p => p.id === this.localPlayerID);
     const localReady = !!state.ready[this.localPlayerID];
+    const lines = Object.entries(localCart);
+    const linesHtml = lines.length
+      ? lines.map(([cid, n]) => {
+          const item = catalogItem(cid);
+          return `<div class="line"><span>${item.name} ×${n}</span><span>$${item.price * n}</span></div>`;
+        }).join('')
+      : '<div class="line empty">(starter kit only)</div>';
+    const cartEl = document.createElement('div');
+    cartEl.className = 'cart local';
+    cartEl.innerHTML = `
+      <div class="who">
+        <span>${localPlayer?.label ?? 'You'} (you) &middot; <span style="color:#aaa;">$${localSpent}/${PLAYER_BUDGET}</span></span>
+        <span class="ready-pill${localReady ? ' on' : ''}">${localReady ? 'READY' : 'choosing…'}</span>
+      </div>
+      <div class="lines">${linesHtml}</div>
+    `;
+    this.cartsEl.appendChild(cartEl);
+
     this.readyBtn.classList.toggle('on', localReady);
-    this.readyBtn.textContent = localReady ? 'UN-READY' : 'READY';
-    const total = state.players.length;
-    const ready = state.players.filter(p => !!state.ready[p.id]).length;
+    this.readyBtn.textContent = localReady ? 'STARTING' : 'READY';
     if (typeof state.starting === 'number' && state.starting > 0) {
-      this.statusEl.textContent = `Starting in ${state.starting.toFixed(1)}s — un-ready to cancel`;
+      this.statusEl.textContent = `Starting in ${state.starting.toFixed(1)}s`;
       this.statusEl.style.color = '#ffd9a3';
     } else {
-      const timeRemaining = Math.max(0, Math.ceil(state.maxTimer ?? 120));
-      this.statusEl.textContent = ready === total
-        ? 'All ready — preparing bunker site…'
-        : `${ready} / ${total} ready — auto-start in ${timeRemaining}s`;
+      this.statusEl.textContent = 'Ready starts your game immediately';
       this.statusEl.style.color = '';
     }
   }
