@@ -165,10 +165,12 @@ export class LobbyUI {
       console.info('[lobby] READY button clicked');
       this.onAction('lobby:ready');
     });
-    // Eat clicks on the lobby root so the canvas mousedown handler (which would
-    // try to grab pointer-lock) never fires while a lobby UI is interactive.
-    root.addEventListener('mousedown', (e) => e.stopPropagation(), true);
-    root.addEventListener('click',     (e) => e.stopPropagation(), true);
+    // Stop lobby clicks from bubbling up to the document — netplayjs's
+    // pointerLock=true installs a mousedown listener that would otherwise grab
+    // the pointer and hide the cursor. Bubble phase only, so inner buttons
+    // still receive their click first.
+    root.addEventListener('mousedown', (e) => e.stopPropagation(), false);
+    root.addEventListener('click',     (e) => e.stopPropagation(), false);
     this._buildCatalog();
   }
 
@@ -255,14 +257,15 @@ export class LobbyUI {
     this.readyBtn.classList.toggle('on', localReady);
     this.readyBtn.textContent = localReady ? 'UN-READY' : 'READY';
     const total = state.players.length;
-    const ready = state.players.filter(p => state.ready[p.id]).length;
+    const ready = state.players.filter(p => !!state.ready[p.id]).length;
     if (typeof state.starting === 'number' && state.starting > 0) {
       this.statusEl.textContent = `Starting in ${state.starting.toFixed(1)}s — un-ready to cancel`;
       this.statusEl.style.color = '#ffd9a3';
     } else {
+      const timeRemaining = Math.max(0, Math.ceil(state.maxTimer ?? 120));
       this.statusEl.textContent = ready === total
         ? 'All ready — preparing bunker site…'
-        : `${ready} / ${total} ready`;
+        : `${ready} / ${total} ready (Auto-start in ${timeRemaining}s)`;
       this.statusEl.style.color = '';
     }
   }

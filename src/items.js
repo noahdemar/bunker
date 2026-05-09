@@ -22,7 +22,7 @@ export const ITEM_DEFS = {
   water_tank:  { name: 'Water Tank',  stack: 4, blockId: BLOCKS.WATER_TANK,  label: 'TNK', color: '#3070a0' },
   food_locker: { name: 'Food Locker', stack: 4, blockId: BLOCKS.FOOD_LOCKER, label: 'FOD', color: '#604032' },
   generator:   { name: 'Generator',   stack: 4, blockId: BLOCKS.GENERATOR,   label: 'GEN', color: '#404045' },
-  bed:         { name: 'Bed',         stack: 4, blockId: BLOCKS.BED,         label: 'BED', color: '#a04030' },
+  bed:         { name: 'Bed',         stack: 4, blockId: BLOCKS.BED,         label: 'BED', color: '#a04030', multiCell: { type: 'bed' } },
   door:        { name: 'Door',        stack: 4, blockId: BLOCKS.DOOR_CLOSED,  label: 'DOR', color: '#705030', multiCell: { type: 'door' } },
   vault_door:  { name: 'Vault Door',  stack: 2, blockId: BLOCKS.VAULT_CLOSED, label: 'VLT', color: '#404045', multiCell: { type: 'vault_door' } },
 };

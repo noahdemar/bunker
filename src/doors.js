@@ -1,17 +1,12 @@
 import { BLOCKS } from './blocks.js';
 
-// Doors and vault doors. Each door is a multi-cell structure where every cell holds
-// the same block ID — DOOR_CLOSED/OPEN for 1×2 wood doors, VAULT_CLOSED/OPEN for 3×2
-// vault doors. State (closed vs open) lives in the cell itself, so the door's full
-// state is implicitly part of world.terrain.edits and rides the same MP sync path
-// as every other block edit.
+// Multi-cell structures (doors, beds). Each structure is a set of connected cells
+// sharing the same block ID (or state-variant IDs like DOOR_CLOSED/OPEN).
+// State lives in the cell block IDs themselves.
 //
-// Connectivity is recovered with a small bounded flood-fill, so we don't keep a
-// separate "door registry". This means two adjacent doors of the same type would
-// merge — placement intentionally requires every target cell to be air, so adjacency
-// only happens if a player deliberately stacks them.
+// Connectivity is recovered via flood-fill when interacting/mining.
 
-const DOOR_TYPES = {
+const STRUCT_TYPES = {
   door: {
     closedId: BLOCKS.DOOR_CLOSED,
     openId:   BLOCKS.DOOR_OPEN,
@@ -22,33 +17,50 @@ const DOOR_TYPES = {
     openId:   BLOCKS.VAULT_OPEN,
     width: 3, height: 2,
   },
+  bed: {
+    closedId: BLOCKS.BED,
+    openId:   BLOCKS.BED,
+    width: 2, height: 1, horizontal: true,
+  }
 };
 
 export function isDoorBlock(id) {
   return id === BLOCKS.DOOR_CLOSED  || id === BLOCKS.DOOR_OPEN
-      || id === BLOCKS.VAULT_CLOSED || id === BLOCKS.VAULT_OPEN;
+      || id === BLOCKS.VAULT_CLOSED || id === BLOCKS.VAULT_OPEN
+      || id === BLOCKS.BED;
 }
 
 export function isDoorPassable(id) {
   return id === BLOCKS.DOOR_OPEN || id === BLOCKS.VAULT_OPEN;
 }
 
-function doorTypeForBlock(id) {
+function structTypeForBlock(id) {
   if (id === BLOCKS.DOOR_CLOSED  || id === BLOCKS.DOOR_OPEN)  return 'door';
   if (id === BLOCKS.VAULT_CLOSED || id === BLOCKS.VAULT_OPEN) return 'vault_door';
+  if (id === BLOCKS.BED) return 'bed';
   return null;
 }
 
-function cellsForDoor(type, anchor, axis) {
-  const def = DOOR_TYPES[type];
+function cellsForStruct(type, anchor, axis) {
+  const def = STRUCT_TYPES[type];
   const cells = [];
+  if (def.horizontal) {
+    // 2x1 horizontal: along the chosen axis (facing).
+    for (let dw = 0; dw < def.width; dw++) {
+      const cx = anchor.x + (axis === 'x' ? dw : 0);
+      const cz = anchor.z + (axis === 'z' ? dw : 0);
+      cells.push({ x: cx, y: anchor.y, z: cz });
+    }
+    return cells;
+  }
   if (def.width === 1) {
+    // 1xN vertical.
     for (let dy = 0; dy < def.height; dy++) {
       cells.push({ x: anchor.x, y: anchor.y + dy, z: anchor.z });
     }
     return cells;
   }
-  // 3×2: 3 cells along the chosen horizontal axis, 2 stacked vertically.
+  // MxN vertical (vault door): M cells along horizontal axis, N stacked.
   const half = Math.floor(def.width / 2);
   for (let dy = 0; dy < def.height; dy++) {
     for (let dw = -half; dw <= half; dw++) {
@@ -68,16 +80,21 @@ function cellInsidePlayer(player, x, y, z) {
   return x >= px0 && x <= px1 && y >= py0 && y <= py1 && z >= pz0 && z <= pz1;
 }
 
-// Try to place a door of `type` with its anchor at `place`. Returns true on success.
-// `placer` must expose { x, y, z, yaw } so we can choose the vault door's horizontal
-// axis (perpendicular to the placer's facing) and avoid placing inside their AABB.
 export function tryPlaceDoor(world, placer, place, type) {
-  const def = DOOR_TYPES[type];
+  const def = STRUCT_TYPES[type];
   if (!def) return false;
-  // Vault axis: perpendicular to player's primary facing direction.
+
+  // Horizontal structs (bed) align WITH the player's facing.
+  // Vertical width>1 structs (vault door) align PERPENDICULAR to facing.
   const facingX = Math.abs(Math.sin(placer.yaw)) > Math.abs(Math.cos(placer.yaw));
-  const axis = def.width === 1 ? 'x' : (facingX ? 'z' : 'x');
-  const cells = cellsForDoor(type, place, axis);
+  let axis;
+  if (def.horizontal) {
+    axis = facingX ? 'x' : 'z';
+  } else {
+    axis = def.width === 1 ? 'x' : (facingX ? 'z' : 'x');
+  }
+
+  const cells = cellsForStruct(type, place, axis);
   for (const c of cells) {
     if (world.terrain.blockAt(c.x, c.y, c.z) !== BLOCKS.AIR) return false;
     if (cellInsidePlayer(placer, c.x, c.y, c.z)) return false;
@@ -88,13 +105,11 @@ export function tryPlaceDoor(world, placer, place, type) {
   return true;
 }
 
-// Bounded flood-fill: every connected cell of the same door type, within a 5-cell
-// radius of the seed (covers a 3×2 vault door comfortably).
-function connectedDoorCells(world, x, y, z) {
+function connectedStructCells(world, x, y, z) {
   const startId = world.terrain.blockAt(x, y, z);
-  if (!isDoorBlock(startId)) return [];
-  const type = doorTypeForBlock(startId);
-  const def = DOOR_TYPES[type];
+  const type = structTypeForBlock(startId);
+  if (!type) return [];
+  const def = STRUCT_TYPES[type];
   const cells = [];
   const visited = new Set();
   const queue = [[x, y, z]];
@@ -114,13 +129,13 @@ function connectedDoorCells(world, x, y, z) {
   return cells;
 }
 
-// Toggle every connected cell of the door at (x,y,z) between closed and open.
 export function tryToggleDoor(world, x, y, z) {
   const id = world.terrain.blockAt(x, y, z);
-  if (!isDoorBlock(id)) return false;
-  const type = doorTypeForBlock(id);
-  const def = DOOR_TYPES[type];
-  const cells = connectedDoorCells(world, x, y, z);
+  const type = structTypeForBlock(id);
+  if (!type) return false;
+  const def = STRUCT_TYPES[type];
+  if (def.closedId === def.openId) return false; // Not toggleable (bed)
+  const cells = connectedStructCells(world, x, y, z);
   if (cells.length === 0) return false;
   const newId = id === def.closedId ? def.openId : def.closedId;
   for (const [cx, cy, cz] of cells) {
@@ -131,13 +146,11 @@ export function tryToggleDoor(world, x, y, z) {
   return true;
 }
 
-// Remove the entire door given any cell. Returns the item id ('door' / 'vault_door')
-// to refund to the breaker, or null if the cell wasn't a door.
 export function removeDoor(world, x, y, z) {
   const id = world.terrain.blockAt(x, y, z);
-  if (!isDoorBlock(id)) return null;
-  const type = doorTypeForBlock(id);
-  const cells = connectedDoorCells(world, x, y, z);
+  const type = structTypeForBlock(id);
+  if (!type) return null;
+  const cells = connectedStructCells(world, x, y, z);
   for (const [cx, cy, cz] of cells) {
     world.setBlock(cx, cy, cz, BLOCKS.AIR);
   }

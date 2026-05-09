@@ -343,34 +343,23 @@ function vaultOpenTex() {
   return texFromCanvas(c);
 }
 
-function wireSideTex() {
+function wireGlyphTex() {
   const [c, ctx] = makeCanvas();
   ctx.clearRect(0, 0, SIZE, SIZE);
-  // central thin copper strand
-  const x0 = SIZE * 0.46, w = SIZE * 0.08;
+  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.08;
   ctx.fillStyle = '#c88848';
-  ctx.fillRect(x0, 0, w, SIZE);
-  // copper highlight
-  ctx.fillStyle = '#ffd090';
-  ctx.fillRect(x0 + 1, 0, 1, SIZE);
-  // brass insulation rings every 8px
-  ctx.fillStyle = '#5a4030';
-  for (let y = 4; y < SIZE; y += 8) {
-    ctx.fillRect(x0 - 1, y, w + 2, 2);
-  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
   return texFromCanvas(c);
 }
-function wireTopTex() {
+function wireBottomTex() {
   const [c, ctx] = makeCanvas();
   ctx.clearRect(0, 0, SIZE, SIZE);
   const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.06;
   ctx.fillStyle = '#c88848';
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#5a4030';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.6, 0, Math.PI * 2);
   ctx.fill();
   return texFromCanvas(c);
 }
@@ -448,33 +437,36 @@ function bedTopTex() {
   return texFromCanvas(c);
 }
 
-function torchSideTex() {
+
+function torchGlyphTex() {
   const [c, ctx] = makeCanvas();
   ctx.clearRect(0, 0, SIZE, SIZE);
-  // wooden stick — central column, bottom 60%
+  // centered stick + flame core; looks okay from all angles
   const x0 = SIZE * 0.42, w = SIZE * 0.16;
   ctx.fillStyle = '#62421e';
-  ctx.fillRect(x0, SIZE * 0.40, w, SIZE * 0.50);
-  // grain
-  for (let i = 0; i < 6; i++) {
-    ctx.fillStyle = `rgba(40,28,12,${0.3 + Math.random() * 0.3})`;
-    ctx.fillRect(x0, SIZE * 0.40 + Math.random() * SIZE * 0.50, w, 1);
-  }
-  // flame plume — outer glow then bright core
-  const fx = SIZE * 0.5, fy = SIZE * 0.22;
-  let grad = ctx.createRadialGradient(fx, fy, 1, fx, fy, SIZE * 0.22);
-  grad.addColorStop(0,    '#ffffe0');
-  grad.addColorStop(0.4,  '#ffa030');
-  grad.addColorStop(0.85, '#a02000');
-  grad.addColorStop(1,    'rgba(160,32,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(SIZE * 0.22, 0, SIZE * 0.56, SIZE * 0.45);
-  grad = ctx.createRadialGradient(fx, fy - 2, 1, fx, fy, SIZE * 0.10);
+  ctx.fillRect(x0, SIZE * 0.45, w, SIZE * 0.45);
+  const cx = SIZE / 2, cy = SIZE / 2;
+  const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, SIZE * 0.18);
   grad.addColorStop(0,    '#fffceb');
   grad.addColorStop(0.7,  '#ffe080');
   grad.addColorStop(1,    'rgba(255,160,40,0)');
   ctx.fillStyle = grad;
-  ctx.fillRect(SIZE * 0.32, SIZE * 0.06, SIZE * 0.36, SIZE * 0.30);
+  ctx.beginPath(); ctx.arc(cx, cy, SIZE * 0.18, 0, Math.PI * 2); ctx.fill();
+  return texFromCanvas(c);
+}
+function torchTopTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // centered flame core for the top view
+  const cx = SIZE / 2, cy = SIZE / 2;
+  const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, SIZE * 0.16);
+  grad.addColorStop(0,    '#fffceb');
+  grad.addColorStop(0.7,  '#ffe080');
+  grad.addColorStop(1,    'rgba(255,160,40,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, SIZE * 0.16, 0, Math.PI * 2);
+  ctx.fill();
   return texFromCanvas(c);
 }
 function torchEmissiveTex() {
@@ -489,6 +481,15 @@ function torchEmissiveTex() {
   grad.addColorStop(1,    'rgba(0,0,0,0)');
   ctx.fillStyle = grad;
   ctx.fillRect(SIZE * 0.22, 0, SIZE * 0.56, SIZE * 0.45);
+  return texFromCanvas(c);
+}
+function torchBottomTex() {
+  const [c, ctx] = makeCanvas();
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  // centered wood stick cross-section for the bottom view
+  const x0 = SIZE * 0.42, w = SIZE * 0.16;
+  ctx.fillStyle = '#62421e';
+  ctx.fillRect(x0, x0, w, w);
   return texFromCanvas(c);
 }
 function concreteTex() {
@@ -518,15 +519,15 @@ export function makeBlockMaterials() {
     map: leavesTex(), roughness: 1.0, transparent: true, alphaTest: 0.3,
   });
   const concrete = new THREE.MeshStandardMaterial({ map: concreteTex(), roughness: 0.95 });
-  const torchSide = new THREE.MeshStandardMaterial({
-    map: torchSideTex(),
-    emissiveMap: torchEmissiveTex(),
+  const torchMaterial = new THREE.MeshStandardMaterial({
+    map: torchGlyphTex(),
+    emissiveMap: torchGlyphTex(),
     emissive: 0xffcc70,
     emissiveIntensity: 2.0,
     transparent: true,
-    alphaTest: 0.3,
+    alphaTest: 0.7,
+    depthWrite: true,
     roughness: 0.6,
-    side: THREE.DoubleSide,
   });
 
   // Helper: faces array [+x, -x, +y, -y, +z, -z]
@@ -541,7 +542,7 @@ export function makeBlockMaterials() {
   materials[BLOCKS.WOOD]     = split(woodSide, woodTop, woodTop);
   materials[BLOCKS.LEAVES]   = all(leaves);
   materials[BLOCKS.CONCRETE] = all(concrete);
-  materials[BLOCKS.TORCH]    = all(torchSide);
+  materials[BLOCKS.TORCH]    = all(torchMaterial);
 
   // Devices.
   const tankSide = new THREE.MeshStandardMaterial({ map: waterTankSideTex(), roughness: 0.7, metalness: 0.25 });
@@ -573,15 +574,12 @@ export function makeBlockMaterials() {
   materials[BLOCKS.BUTTRESS] = split(buttressSide, buttressTop, buttressTop);
 
   // Wire — same alphaTest treatment as buttress, but thinner and copper-colored.
-  const wireSide = new THREE.MeshStandardMaterial({
-    map: wireSideTex(), transparent: true, alphaTest: 0.5,
-    roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide,
+  const wireMaterial = new THREE.MeshStandardMaterial({
+    map: wireGlyphTex(), transparent: true, alphaTest: 0.7,
+    depthWrite: true,
+    roughness: 0.4, metalness: 0.6,
   });
-  const wireTop = new THREE.MeshStandardMaterial({
-    map: wireTopTex(), transparent: true, alphaTest: 0.5,
-    roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide,
-  });
-  materials[BLOCKS.WIRE] = split(wireSide, wireTop, wireTop);
+  materials[BLOCKS.WIRE] = all(wireMaterial);
 
   // Doors — closed is solid wood, open is alphaTest jambs only.
   const doorClosed = new THREE.MeshStandardMaterial({ map: doorClosedTex(), roughness: 0.85 });

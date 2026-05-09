@@ -44,7 +44,7 @@ function virtualKeyCodeFor(key) {
   switch (key) {
     case 'f': return { code: 'KeyF', keyCode: 70 };
     case 'r': return { code: 'KeyR', keyCode: 82 };
-    default: return { code: key, keyCode: 0 };
+    default: return { code: key, keyCode: 255 };
   }
 }
 
@@ -113,6 +113,7 @@ class BunkerMPGame extends netplayjs.Game {
     this.lobbyCarts = {};        // playerID → { catalogId: count }
     this.lobbyReady = {};        // playerID → bool
     this.lobbyStartCountdown = 0; // ms remaining once everyone is ready (cancellable)
+    this.lobbyMaxTimer = 120 * 1000; // 120s maximum lobby time
     for (const p of players) {
       this.lobbyCarts[p.getID()] = {};
       this.lobbyReady[p.getID()] = false;
@@ -275,6 +276,7 @@ class BunkerMPGame extends netplayjs.Game {
       ready: this.lobbyReady,
       players: labels,
       starting: this.lobbyStartCountdown > 0 ? this.lobbyStartCountdown / 1000 : 0,
+      maxTimer: this.lobbyMaxTimer / 1000,
     });
   }
 
@@ -310,9 +312,17 @@ class BunkerMPGame extends netplayjs.Game {
   tickLobby(playerInputs) {
     const DT_MS = BunkerMPGame.timestep;
     let changed = false;
+    this.prevLobbyKeys = this.prevLobbyKeys || {};
+
     for (const [player, input] of playerInputs) {
       const id = player.getID();
+      const prevKeys = this.prevLobbyKeys[id] || {};
+      const nextKeys = {};
+
       for (const k of Object.keys(input.keysPressed ?? {})) {
+        nextKeys[k] = true;
+        if (prevKeys[k]) continue; // Ignore if it was pressed last tick
+
         const buyMatch = /^lobby:buy:(.+)$/.exec(k);
         const unbuyMatch = /^lobby:unbuy:(.+)$/.exec(k);
         if (buyMatch)        { this._lobbyBuy(id, buyMatch[1]); changed = true; }
@@ -324,6 +334,7 @@ class BunkerMPGame extends netplayjs.Game {
           console.info('[lobby] ready toggled for player', id, '→', this.lobbyReady[id]);
         }
       }
+      this.prevLobbyKeys[id] = nextKeys;
     }
 
     // Run / cancel the start countdown based on collective ready state.
@@ -341,6 +352,15 @@ class BunkerMPGame extends netplayjs.Game {
     } else if (this.lobbyStartCountdown > 0) {
       this.lobbyStartCountdown = 0;
       changed = true;
+    }
+
+    if (this.lobbyMaxTimer > 0) {
+      this.lobbyMaxTimer -= DT_MS;
+      changed = true;
+      if (this.lobbyMaxTimer <= 0) {
+        this._startGame();
+        return;
+      }
     }
 
     if (changed) this._refreshLobbyUI();
@@ -518,6 +538,8 @@ class BunkerMPGame extends netplayjs.Game {
       lobbyCarts: this.lobbyCarts,
       lobbyReady: this.lobbyReady,
       lobbyStartCountdown: this.lobbyStartCountdown,
+      lobbyMaxTimer: this.lobbyMaxTimer,
+      prevLobbyKeys: this.prevLobbyKeys,
       timer: this.timer,
       bombPhase: this.bombPhase, bombT: this.bombT, epicenter: this.epicenter,
       players, edits,
@@ -532,6 +554,10 @@ class BunkerMPGame extends netplayjs.Game {
     if (typeof state.lobbyStartCountdown === 'number') {
       this.lobbyStartCountdown = state.lobbyStartCountdown;
     }
+    if (typeof state.lobbyMaxTimer === 'number') {
+      this.lobbyMaxTimer = state.lobbyMaxTimer;
+    }
+    if (state.prevLobbyKeys) this.prevLobbyKeys = state.prevLobbyKeys;
     this.timer = state.timer;
     this.bombPhase = state.bombPhase;
     this.bombT = state.bombT;
