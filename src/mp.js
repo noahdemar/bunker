@@ -173,19 +173,22 @@ class BunkerMPGame extends netplayjs.Game {
 
   _dispatchVirtualKey(type, key) {
     if (key.startsWith('lobby:')) console.info('[lobby] dispatch', type, key);
-    const { code, keyCode } = virtualKeyCodeFor(key);
-    const evt = new KeyboardEvent(type, {
-      key,
-      code,
-      bubbles: true,
-      cancelable: true,
-    });
-    try {
-      Object.defineProperty(evt, 'keyCode', { get: () => keyCode });
-      Object.defineProperty(evt, 'which', { get: () => keyCode });
-    } catch {}
-    const target = document.body ?? document;
-    target.dispatchEvent(evt);
+    if (!window.__injectedVirtualKeys) {
+      window.__injectedVirtualKeys = [];
+      const orig = netplayjs.DefaultInputReader.prototype.getInput;
+      netplayjs.DefaultInputReader.prototype.getInput = function() {
+        const input = orig.call(this);
+        for (const k of window.__injectedVirtualKeys) {
+          input.keysPressed[k] = true;
+          input.keysHeld[k] = true;
+        }
+        window.__injectedVirtualKeys = [];
+        return input;
+      };
+    }
+    if (type === 'keydown') {
+      window.__injectedVirtualKeys.push(key);
+    }
   }
 
   _setVirtualMouseKey(key, down) {
