@@ -4,8 +4,8 @@
 // pool, no contention with teammates. When everyone marks ready the carts are
 // converted into per-player inventories and the game starts.
 //
-// Tools (pickaxe / shovel / axe) are not in the catalog: they're given to every
-// player automatically so nobody can lock themselves out of mining.
+// Tools and basic building supplies are not in the catalog: they're given to every
+// player automatically so nobody can lock themselves out of mining or building.
 
 export const PLAYER_BUDGET = 100;
 
@@ -46,11 +46,15 @@ export function allReady(playerIDs, ready) {
   return playerIDs.every(id => ready[id]);
 }
 
-// Apply a player's cart to their inventory, preceded by the auto-given tool kit.
+// Apply a player's cart to their inventory, preceded by the auto-given starter kit.
 export function applyCartToInventory(inventory, cart) {
   inventory.add('pickaxe', 1);
   inventory.add('shovel', 1);
   inventory.add('axe', 1);
+  inventory.add('concrete', 32);
+  inventory.add('wood', 16);
+  inventory.add('torch', 4);
+  inventory.add('door', 1);
   for (const [catalogId, count] of Object.entries(cart || {})) {
     const item = ITEM_BY_ID[catalogId];
     if (!item) continue;

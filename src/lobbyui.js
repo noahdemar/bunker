@@ -129,7 +129,7 @@ export class LobbyUI {
     root.innerHTML = `
       <div class="window">
         <h1>SUPPLY DEPOT</h1>
-        <div class="subtitle">Pick your kit. Each survivor has $${PLAYER_BUDGET} to spend. Game starts when everyone is ready.</div>
+        <div class="subtitle">Pick optional extras. Everyone gets a starter kit and the game auto-starts shortly.</div>
         <div class="budget">
           <span>SPENT</span>
           <span class="spent">0</span>
@@ -265,7 +265,7 @@ export class LobbyUI {
       const timeRemaining = Math.max(0, Math.ceil(state.maxTimer ?? 120));
       this.statusEl.textContent = ready === total
         ? 'All ready — preparing bunker site…'
-        : `${ready} / ${total} ready (Auto-start in ${timeRemaining}s)`;
+        : `${ready} / ${total} ready — auto-start in ${timeRemaining}s`;
       this.statusEl.style.color = '';
     }
   }

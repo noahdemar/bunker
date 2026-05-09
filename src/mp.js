@@ -16,6 +16,7 @@ import { applyCartToInventory, catalogItem, cartCost, allReady, PLAYER_BUDGET } 
 import { LobbyUI } from './lobbyui.js';
 
 const START_DELAY_MS = 3000;
+const LOBBY_AUTO_START_MS = 100000;
 
 // Multiplayer Bunker — full single-player feature set ported into a netplayjs Game.
 //
@@ -113,7 +114,7 @@ class BunkerMPGame extends netplayjs.Game {
     this.lobbyCarts = {};        // playerID → { catalogId: count }
     this.lobbyReady = {};        // playerID → bool
     this.lobbyStartCountdown = 0; // ms remaining once everyone is ready (cancellable)
-    this.lobbyMaxTimer = 120 * 1000; // 120s maximum lobby time
+    this.lobbyMaxTimer = LOBBY_AUTO_START_MS; // maximum lobby time
     for (const p of players) {
       this.lobbyCarts[p.getID()] = {};
       this.lobbyReady[p.getID()] = false;
