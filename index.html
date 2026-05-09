@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Bunker</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0c0a08; overflow: hidden;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #ddd; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+
+  #hud {
+    position: fixed; top: 12px; left: 12px; padding: 10px 12px;
+    background: rgba(0,0,0,0.45); border: 1px solid #2c2620; border-radius: 6px;
+    font-size: 12px; line-height: 1.5; pointer-events: none; user-select: none;
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
+  #hud b { color: #ffe9c4; letter-spacing: 0.08em; }
+  #hud .keys { color: #aaa; }
+
+  #timer {
+    position: fixed; top: 12px; right: 12px; padding: 10px 14px;
+    background: rgba(20,10,8,0.55); border: 1px solid #4a2a20; border-radius: 6px;
+    font-size: 22px; font-weight: bold; color: #ffd1a8; letter-spacing: 0.1em;
+    pointer-events: none; user-select: none; min-width: 120px; text-align: center;
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
+  #timer.warn { color: #ff8060; border-color: #6a2a18; }
+  #timer.critical { color: #ff5040; border-color: #8a1818;
+    animation: pulse 0.6s ease-in-out infinite alternate; }
+  @keyframes pulse { from { opacity: 0.85; } to { opacity: 1; transform: scale(1.04); } }
+
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 14px; height: 14px;
+    transform: translate(-50%, -50%); pointer-events: none;
+    mix-blend-mode: difference;
+  }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+  #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #crosshair::after  { top: 6px; left: 0; height: 2px; width: 14px; }
+
+  #flash {
+    position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none;
+    z-index: 8; transition: opacity 0.1s linear;
+  }
+
+  #hotbar {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; pointer-events: none; user-select: none; z-index: 5;
+  }
+  .hotbar-slot {
+    width: 52px; height: 52px;
+    background: rgba(0,0,0,0.45);
+    border: 2px solid #2c2620;
+    border-radius: 4px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
+  .hotbar-slot.active {
+    border-color: #ffd9a3;
+    background: rgba(50,40,28,0.65);
+    box-shadow: 0 0 6px rgba(255,217,163,0.35);
+  }
+  .hotbar-slot .num {
+    position: absolute; top: 2px; left: 4px;
+    font-size: 10px; color: #aaa; opacity: 0.85;
+  }
+  .hotbar-slot .swatch {
+    width: 30px; height: 30px;
+    border: 1px solid rgba(0,0,0,0.4);
+    border-radius: 2px;
+  }
+  .hotbar-slot .label {
+    position: absolute; left: 0; right: 0; bottom: 14px;
+    text-align: center; font-size: 9px; letter-spacing: 0.06em;
+    color: #fff; text-shadow: 1px 1px 0 #000;
+  }
+  .hotbar-slot .count {
+    position: absolute; bottom: 2px; right: 4px;
+    font-size: 12px; font-weight: bold; color: #ffeec0;
+    text-shadow: 1px 1px 0 #000;
+  }
+
+  #mineprogress {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, 28px);
+    width: 64px; height: 4px;
+    background: rgba(0,0,0,0.55);
+    border-radius: 2px;
+    overflow: hidden;
+    display: none;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #mineprogress .fill {
+    height: 100%; width: 0%;
+    background: #ffd9a3;
+  }
+
+  #toast {
+    position: fixed; left: 50%; top: 30%; transform: translate(-50%, 0);
+    padding: 8px 14px; background: rgba(80,20,10,0.85);
+    border: 1px solid #6a2a18; border-radius: 4px;
+    color: #ffe; font-size: 13px; letter-spacing: 0.05em;
+    pointer-events: none; opacity: 0; transition: opacity 0.2s;
+    z-index: 7;
+  }
+  #toast.visible { opacity: 1; }
+
+  #meters {
+    position: fixed; bottom: 16px; left: 16px;
+    display: flex; flex-direction: column; gap: 4px;
+    pointer-events: none; user-select: none; z-index: 5;
+    background: rgba(0,0,0,0.45); padding: 10px 12px;
+    border: 1px solid #2c2620; border-radius: 6px;
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
+  .meter {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; letter-spacing: 0.05em; color: #ccc;
+  }
+  .meter .lbl { width: 56px; }
+  .meter .bar {
+    width: 130px; height: 8px;
+    background: rgba(0,0,0,0.55); border: 1px solid #1a1410; border-radius: 2px;
+    overflow: hidden; position: relative;
+  }
+  .meter .bar .fill {
+    height: 100%; width: 100%;
+    transition: width 0.25s ease-out;
+  }
+  .meter.water  .fill { background: linear-gradient(90deg, #3070a0, #5aa0c8); }
+  .meter.food   .fill { background: linear-gradient(90deg, #5a7a30, #8aaa50); }
+  .meter.power  .fill { background: linear-gradient(90deg, #b07020, #e0a040); }
+  .meter.health .fill { background: linear-gradient(90deg, #b03028, #e05050); }
+  .meter.low .fill { animation: meterPulse 0.7s ease-in-out infinite alternate; }
+  @keyframes meterPulse { from { opacity: 0.6; } to { opacity: 1; } }
+  .meter .val { width: 28px; text-align: right; color: #eee; }
+  .shelter {
+    margin-top: 4px; font-size: 11px; letter-spacing: 0.08em;
+    color: #888; padding: 2px 6px; border: 1px solid #2c2620; border-radius: 2px;
+    text-align: center;
+  }
+  .shelter.on { color: #9ad0ff; border-color: #2a4868; background: rgba(20,40,60,0.4); }
+
+  #survivaltimer {
+    position: fixed; top: 60px; right: 12px;
+    padding: 6px 10px; font-size: 13px; letter-spacing: 0.1em;
+    color: #9ad0ff; background: rgba(0,30,40,0.5);
+    border: 1px solid #2a4868; border-radius: 4px;
+    pointer-events: none; user-select: none;
+    display: none;
+  }
+
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 6;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  }
+
+  #overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at center, rgba(40,30,25,0.55), rgba(0,0,0,0.85));
+    color: #eee; cursor: pointer; z-index: 10;
+  }
+  #overlay .panel {
+    text-align: center; padding: 24px 32px; border: 1px solid #44382c;
+    background: rgba(20,16,12,0.78); border-radius: 8px; max-width: 460px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  #overlay h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: 0.2em; color: #ffd9a3; }
+  #overlay p  { margin: 6px 0; font-size: 13px; opacity: 0.9; }
+  .hidden { display: none !important; }
+</style>
+  <script type="module" crossorigin src="/bunker/assets/main-C-OiSxS-.js"></script>
+  <link rel="modulepreload" crossorigin href="/bunker/assets/doors-B5rudIRH.js">
+</head>
+<body>
+<div id="app"></div>
+<div id="hud">
+  <div><b>BUNKER</b></div>
+  <div class="keys">WASD &middot; Space jump &middot; Mouse look</div>
+  <div class="keys">Left click mine &middot; Right click place</div>
+  <div class="keys">E inventory &middot; T toggle door &middot; 1-9 slot &middot; Esc release</div>
+</div>
+<div id="timer">30:00</div>
+<div id="crosshair"></div>
+<div id="mineprogress"><div class="fill"></div></div>
+<div id="hotbar"></div>
+<div id="toast"></div>
+<div id="meters">
+  <div class="meter water"><div class="lbl">WATER</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="meter food"><div class="lbl">FOOD</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="meter power"><div class="lbl">POWER</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="meter health"><div class="lbl">HEALTH</div><div class="bar"><div class="fill"></div></div><div class="val">100</div></div>
+  <div class="shelter">SHELTER —</div>
+</div>
+<div id="survivaltimer">SURVIVAL 0:00</div>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="overlay">
+  <div class="panel">
+    <h1>NUCLEAR BUNKER</h1>
+    <p>You have <b>30 minutes</b> before the bomb drops.</p>
+    <p>Build a sealed concrete bunker to survive.</p>
+    <p style="opacity:0.7; margin-top:14px;">Click anywhere to begin</p>
+    <p style="opacity:0.6; margin-top:14px; font-size: 11px;">
+      <a href="/mp.html" style="color:#9ad0ff; text-decoration:none;">[ MULTIPLAYER (BETA) ]</a>
+    </p>
+  </div>
+</div>
+</body>
+</html>
