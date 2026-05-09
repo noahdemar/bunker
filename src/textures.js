@@ -391,15 +391,16 @@ function concreteTex() {
 
 // Per-block-type geometry. Most blocks are full 1x1x1 cubes; torches, buttresses,
 // and wire are slim glyph shapes that occupy only the center of their cell so
-// neighbours don't overlap or z-fight with their faces. The geometry is
-// translated upward so its bottom rests on the cell floor (y=0 in cell-local
-// space) rather than the cell center — without that the torch would float.
+// neighbours don't overlap or z-fight with their faces. Each glyph leaves a
+// ~0.005-cell epsilon at the floor and ceiling so its bottom/top face is never
+// coplanar with the adjacent block's face (which produced visible z-fighting
+// shimmer on torches when they sat on a solid floor).
 export function makeBlockGeometries() {
   const cube = new THREE.BoxGeometry(1, 1, 1);
   const stick = new THREE.BoxGeometry(0.18, 0.7, 0.18);
-  stick.translate(0, -0.15, 0); // sit on the floor of the cell
-  const column = new THREE.BoxGeometry(0.35, 1.0, 0.35);
-  const strand = new THREE.BoxGeometry(0.10, 1.0, 0.10);
+  stick.translate(0, -0.145, 0); // bottom at y=0.005, top at y=0.705 within the cell
+  const column = new THREE.BoxGeometry(0.35, 0.99, 0.35);
+  const strand = new THREE.BoxGeometry(0.10, 0.99, 0.10);
   return {
     [BLOCKS.TORCH]:    stick,
     [BLOCKS.BUTTRESS]: column,
@@ -427,7 +428,7 @@ export function makeBlockMaterials() {
     color: 0x62421e, roughness: 0.7,
   });
   const torchFlameMat = new THREE.MeshStandardMaterial({
-    color: 0xffd070, emissive: 0xffcc70, emissiveIntensity: 2.0, roughness: 0.5,
+    color: 0xffb040, emissive: 0xffa040, emissiveIntensity: 1.1, roughness: 0.6,
   });
 
   // Helper: faces array [+x, -x, +y, -y, +z, -z]
